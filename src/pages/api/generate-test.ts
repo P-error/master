@@ -6,7 +6,7 @@ import OpenAI from "openai";
 import fs from "fs/promises";
 import path from "path";
 
-const prisma = new PrismaClient();
+// replaced by prisma singleton
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ===== Таксономия (53 метки) =====

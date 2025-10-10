@@ -1,10 +1,10 @@
 // src/pages/api/me.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 import cookie from "cookie";
 
-const prisma = new PrismaClient();
+// replaced by prisma singleton
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret"; // ⚠️ вынести в .env
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

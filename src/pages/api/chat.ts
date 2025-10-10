@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { verify } from "jsonwebtoken";
 import OpenAI from "openai";
 
-const prisma = new PrismaClient();
+// replaced by prisma singleton
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
