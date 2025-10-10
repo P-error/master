@@ -12,7 +12,8 @@
         "prisma:deploy": "dotenv -e .env.local -- prisma migrate deploy --schema=prisma/schema.prisma",
         "prisma:studio": "dotenv -e .env.local -- prisma studio --schema=prisma/schema.prisma",
         "prisma:generate": "dotenv -e .env.local -- prisma generate --schema=prisma/schema.prisma",
-        "prisma:seed": "dotenv -e .env.local -- node prisma/seed.js"
+        "prisma:seed": "dotenv -e .env.local -- node prisma/seed.js",
+        "postinstall": "prisma generate"
     },
     "dependencies": {
         "@prisma/client": "^6.17.0",

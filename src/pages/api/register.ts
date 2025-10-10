@@ -1,7 +1,7 @@
 // src/pages/api/register.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 
 // replaced by prisma singleton
 

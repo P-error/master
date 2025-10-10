@@ -3,14 +3,21 @@ import { prisma } from "@/lib/prisma";
 import { verify } from "jsonwebtoken";
 import { parse } from "cookie";
 
-// replaced by prisma singleton
+type RecItem =
+  | { type: "positive"; message: string }
+  | { type: "negative"; message: string }
+  | { type: "neutral";  message: string };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+type Resp =
+  | { summary: string; recommendations: RecItem[] }
+  | { error: string };
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse<Resp>) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Проверяем токен
+  // JWT из cookie
   const cookies = req.headers.cookie ? parse(req.headers.cookie) : {};
   const token = cookies.token;
   if (!token) return res.status(401).json({ error: "Not authenticated" });
@@ -24,69 +31,71 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Загружаем все результаты по тегам
+    // Берём только нужные поля из БД (совместимо со схемой)
     const tagResults = await prisma.questionTagResult.findMany({
       where: { userId },
+      select: { tags: true, isCorrect: true },
     });
 
     if (!tagResults.length) {
       return res.status(200).json({ recommendations: [], summary: "Недостаточно данных для анализа" });
     }
 
-    // Считаем статистику по каждому тегу
+    // Счётчики по тегам
     const tagStats: Record<string, { total: number; correct: number }> = {};
-    tagResults.forEach((r) => {
-      const tags = (r.tags as string[]) || [];
-      tags.forEach((tag) => {
-        if (!tagStats[tag]) tagStats[tag] = { total: 0, correct: 0 };
-        tagStats[tag].total++;
-        if (r.isCorrect) tagStats[tag].correct++;
+
+    for (const r of tagResults) {
+      const tags: string[] = Array.isArray(r.tags) ? r.tags.filter(t => typeof t === "string" && t.trim()) : [];
+      if (tags.length === 0) continue;
+
+      for (const tag of tags) {
+        const key = tag.trim();
+        if (!key) continue;
+
+        if (!tagStats[key]) tagStats[key] = { total: 0, correct: 0 };
+        tagStats[key].total++;
+        if (r.isCorrect === true) tagStats[key].correct++;
+      }
+    }
+
+    const entries = Object.entries(tagStats);
+    if (entries.length === 0) {
+      return res.status(200).json({
+        recommendations: [{ type: "neutral", message: "Пока нет тегов для анализа. Продолжайте решать задания." }],
+        summary: "Недостаточно данных по тегам",
       });
-    });
+    }
 
-    const tagAccuracies = Object.entries(tagStats).map(([tag, stat]) => {
-      return {
-        tag,
-        accuracy: stat.correct / stat.total,
-        total: stat.total,
-      };
-    });
+    const tagAccuracies = entries.map(([tag, stat]) => ({
+      tag,
+      total: stat.total,
+      accuracy: stat.total > 0 ? stat.correct / stat.total : 0,
+    }));
 
-    // Средняя точность по всем тегам
     const avgAccuracy =
       tagAccuracies.reduce((acc, t) => acc + t.accuracy, 0) / tagAccuracies.length;
 
-    const recommendations: any[] = [];
+    const recommendations: RecItem[] = [];
+    for (const t of tagAccuracies) {
+      if (t.total < 3) continue; // слишком мало данных для выводов
 
-    tagAccuracies.forEach((t) => {
-      if (t.total < 3) return; // слишком мало данных для выводов
-
-      // Если тег сильно выше среднего → предложить усилить
       if (t.accuracy > avgAccuracy + 0.2) {
         recommendations.push({
           type: "positive",
-          message: `Ваши ответы на вопросы с тегом "${t.tag}" успешнее на ${(t.accuracy * 100).toFixed(
-            0
-          )}% — рекомендуем добавить этот стиль/формат в ваши предпочтения.`,
+          message: `Тег "${t.tag}" идёт заметно лучше среднего (${(t.accuracy * 100).toFixed(0)}%). Можно усилить его долю в рекомендациях.`,
         });
-      }
-
-      // Если тег сильно ниже среднего → предложить ослабить
-      if (t.accuracy < avgAccuracy - 0.2) {
+      } else if (t.accuracy < avgAccuracy - 0.2) {
         recommendations.push({
           type: "negative",
-          message: `Точность по вопросам с тегом "${t.tag}" ниже нормы (${(
-            t.accuracy * 100
-          ).toFixed(0)}%). Возможно, стоит снизить его приоритет.`,
+          message: `Точность по тегу "${t.tag}" ниже среднего (${(t.accuracy * 100).toFixed(0)}%). Имеет смысл снизить приоритет или добавить подсказки.`,
         });
       }
-    });
+    }
 
-    // Если нет конкретных тегов с отклонениями
     if (recommendations.length === 0) {
       recommendations.push({
         type: "neutral",
-        message: "Ваши результаты равномерны по всем тегам. Продолжайте тренировки!",
+        message: "Результаты по тегам ровные — продолжайте в том же духе!",
       });
     }
 

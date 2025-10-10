@@ -1,16 +1,22 @@
+// ---------- Prisma Client ----------
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------- Database ----------
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
+// ---------- Models ----------
 
 model User {
-  id              Int            @id @default(autoincrement())
-  login           String         @unique
-  password        String
+  id       Int    @id @default(autoincrement())
+  login    String @unique
+  password String
+
+  // Профиль (опциональные поля, взято из фактического дампа)
   age             Int?
   educationLevel  String?
   learningGoal    String?
@@ -20,68 +26,82 @@ model User {
   detailLevel     String?
   priorKnowledge  String?
   languageLevel   String?
+  darkMode        Boolean @default(false)
+  accessibleMode  Boolean @default(false)
+  fontSize        String  @default("base")
 
-  subjects        Subject[]
-  tests           Test[]
-  chatMessages    ChatMessage[]  
+  // Связи
+  subjects           Subject[]
+  questionTagResults QuestionTagResult[]
+  chatMessages       ChatMessage[]
+  tests              Test[] // <-- добавили связь с тестами
 
-  darkMode        Boolean   @default(false)
-  accessibleMode  Boolean   @default(false)
-  fontSize        String    @default("base") // sm | base | lg | xl
-
-  questionResults QuestionTagResult[]
+  // Метаданные
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ChatMessage {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  role      String   // "user" | "assistant"
-  content   String
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id]) // прямая сторона
+
+  role    String // 'user' | 'assistant' (можно валидировать на уровне приложения)
+  content String
+
   createdAt DateTime @default(now())
 }
 
-
-
-
-
-
 model Subject {
-  id           Int      @id @default(autoincrement())
-  name         String
-  difficulty   String   @default("medium")
-  user         User     @relation(fields: [userId], references: [id])
-  userId       Int
-  tests        Test[]
+  id         Int    @id @default(autoincrement())
+  name       String
+  difficulty String
+
+  // Владелец предмета
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  // Метаданные
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tests Test[] // <-- тесты по предмету (опционально, если используешь subjectId)
+
+  // Один и тот же пользователь не должен иметь дубликаты имён предметов
+  @@unique([name, userId], name: "name_userId")
 }
 
+model QuestionTagResult {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  tags      String[] // <-- массив строк
+  isCorrect Boolean?
+  createdAt DateTime @default(now())
+  testId    Int? // <-- нужен для привязки результата к тесту
+  question  String? // <-- текст вопроса (если хочешь хранить)
+  Test      Test?    @relation(fields: [testId], references: [id])
+}
 
 model Test {
-  id           Int       @id @default(autoincrement())
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId       Int
-  subject      Subject?  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  subjectId    Int?
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  subjectId Int?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+
   topic        String
   difficulty   String
   numQuestions Int
   numOptions   Int
   score        Int
-  createdAt    DateTime  @default(now())
-  questions    Json
+  questions    Json // сырой JSON с вопросами
 
-  results      QuestionTagResult[]
-}
-
-model QuestionTagResult {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  test      Test     @relation(fields: [testId], references: [id])
-  testId    Int
-  question  String
-  tags      Json   // JSON-массив тегов
-  isCorrect Boolean
   createdAt DateTime @default(now())
-}
+  // updatedAt можно добавить при желании:
+  // updatedAt DateTime  @updatedAt
 
+  // связь в обратную сторону из QuestionTagResult
+  questionTagResults QuestionTagResult[]
+}
