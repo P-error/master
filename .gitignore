@@ -1,0 +1,21 @@
+# Envs & secrets
+.env
+.env.*
+*.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Node/JS
+node_modules/
+dist/
+.next/
+.cache/
+
+# Logs & misc
+*.log
+.DS_Store

@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Тёмная тема для body */
+body.dark {
+  background-color: #1a202c; /* темный фон */
+  color: #f7fafc;           /* светлый текст */
+}

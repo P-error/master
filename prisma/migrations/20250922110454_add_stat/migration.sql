@@ -1,0 +1,12 @@
+-- CreateTable
+CREATE TABLE "QuestionTagResult" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "testId" INTEGER NOT NULL,
+    "question" TEXT NOT NULL,
+    "tags" TEXT NOT NULL,
+    "isCorrect" BOOLEAN NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "QuestionTagResult_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "QuestionTagResult_testId_fkey" FOREIGN KEY ("testId") REFERENCES "Test" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);

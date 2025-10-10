@@ -1,0 +1,52 @@
+{
+    "name": "student-assistant-web",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@prisma/client": "^6.16.2",
+        "bcrypt": "^6.0.0",
+        "bcryptjs": "^3.0.2",
+        "cookie": "^0.6.0",
+        "dotenv": "^17.2.2",
+        "g4f": "^1.4.6",
+        "jsonwebtoken": "^9.0.2",
+        "next": "^15.5.3",
+        "openai": "^5.22.0",
+        "prisma": "^6.16.2",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "recharts": "^3.2.1"
+    },
+    "devDependencies": {
+        "@types/babel__traverse": "^7.28.0",
+        "@types/bcrypt": "^6.0.0",
+        "@types/cookie": "^0.6.0",
+        "@types/estree": "^1.0.8",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/node": "^24.5.2",
+        "@types/react": "^18.3.24",
+        "@types/react-dom": "^18.3.7",
+        "@vitejs/plugin-react": "^4.0.0",
+        "autoprefixer": "^10.4.21",
+        "eslint": "^8.57.1",
+        "eslint-config-next": "^15.5.3",
+        "postcss": "^8.5.6",
+        "prettier": "^2.8.0",
+        "tailwindcss": "^3.4.17",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.2",
+        "vite": "^5.0.0"
+    },
+    "description": "",
+    "main": "index.js",
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs"
+}

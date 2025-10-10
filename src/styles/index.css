@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* небольшие настройки */
+body {
+  @apply bg-gray-50 text-gray-800;
+}
+.container {
+  max-width: 1100px;
+}
