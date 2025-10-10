@@ -1,79 +1,148 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { NextApiRequest, NextApiResponse } from "next";
+import OpenAI from "openai";
 
-type Data =
-  | { ok: true; selectedTags: string[]; debugCounts: Record<string, number> }
-  | { ok: false; error: string };
+type GenerateBody = {
+  subjectId?: number;
+  topic?: string;
+  difficulty?: "easy" | "medium" | "hard";
+  numQuestions?: number;
+  tags?: string[]; // опционально: явно подсказать теги (например ["probability","bayes"])
+  model?: string;
+};
 
-// Универсальная нормализация к string[] — работает и когда tags: Json, и когда tags: String[]
-function normalizeTags(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    // Если это уже массив — оставляем только строки
-    return value.filter((x): x is string => typeof x === 'string');
+export type TestQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  answerIndex: number; // 0..n-1
+  tags: string[]; // тематические метки
+  difficulty: "easy" | "medium" | "hard";
+  topic: string;
+  subjectId: number;
+};
+
+export type GeneratedTest = {
+  subjectId: number;
+  topic: string;
+  difficulty: "easy" | "medium" | "hard";
+  questions: TestQuestion[];
+};
+
+function bad(res: NextApiResponse, msg: string, code = 400) {
+  return res.status(code).json({ error: msg });
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") return bad(res, "Method not allowed", 405);
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return bad(res, "OPENAI_API_KEY is not set", 500);
+
+  let body: GenerateBody;
+  try {
+    body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+  } catch {
+    return bad(res, "Invalid JSON body");
   }
-  if (typeof value === 'string') {
-    // Иногда в БД может лежать строка с JSON
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed)
-        ? parsed.filter((x): x is string => typeof x === 'string')
-        : [];
-    } catch {
-      return [];
+
+  const subjectId = Number(body.subjectId);
+  const topic = (body.topic || "").trim();
+  const difficulty = (body.difficulty || "medium") as "easy" | "medium" | "hard";
+  const numQuestions = Math.min(Math.max(Number(body.numQuestions || 10), 1), 50);
+  const inputTags = Array.isArray(body.tags) ? body.tags.filter(Boolean) : [];
+  const model = body.model || "gpt-4o-mini";
+
+  if (!subjectId || !Number.isFinite(subjectId)) return bad(res, "subjectId must be a number");
+  if (!topic) return bad(res, "topic is required");
+  if (!["easy", "medium", "hard"].includes(difficulty)) return bad(res, "difficulty must be easy|medium|hard");
+
+  // Подготовим системный промпт, чтобы гарантировать строгий формат JSON
+  const system = `You are a test generator. Return ONLY valid JSON. 
+Each question must be multiple-choice with 4 options, include a correct "answerIndex" (0..3), and a non-empty "tags" array.
+Use the following JSON schema, no extra fields:
+
+{
+  "questions": [
+    {
+      "id": "string-uuid-or-stable-id",
+      "question": "string",
+      "options": ["string","string","string","string"],
+      "answerIndex": 0,
+      "tags": ["tag1","tag2"]
     }
-  }
-  // JsonObject/number/boolean/null → пусто
-  return [];
-}
+  ]
+}`;
 
-async function getUnderExploredTags(userId: number): Promise<Record<string, number>> {
-  const results = await prisma.questionTagResult.findMany({
-    where: { userId },
-    select: { tags: true }, // тип может быть JsonValue или string[] в зависимости от сгенерённого клиента
-  });
-
-  const counts: Record<string, number> = {};
-  for (const r of results) {
-    // приводим к string[] независимо от текущей схемы
-    const tags: string[] = normalizeTags((r as { tags: unknown }).tags);
-    for (const t of tags) {
-      const tag = t.trim();
-      if (tag) counts[tag] = (counts[tag] || 0) + 1;
-    }
-  }
-  return counts;
-}
-
-function pickLeastSeenTags(counts: Record<string, number>, limit: number): string[] {
-  const entries = Object.entries(counts);
-  if (entries.length === 0) return [];
-  entries.sort((a, b) => (a[1] ?? 0) - (b[1] ?? 0));
-  return entries.slice(0, Math.max(0, limit)).map(([tag]) => tag);
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-    return;
-  }
+  const user = `Generate ${numQuestions} questions for subjectId=${subjectId}, topic="${topic}", difficulty="${difficulty}".
+If tags were provided, bias the questions to cover them: [${inputTags.join(", ")}].
+Ensure tags on each question are granular (e.g., "probability", "bayes", "linear-regression", "regularization").`;
 
   try {
-    const { userId, count } = req.body ?? {};
-    const uid = Number(userId);
-    const limit = Number(count) > 0 ? Number(count) : 5;
+    const openai = new OpenAI({ apiKey });
+    const completion = await openai.chat.completions.create({
+      model,
+      temperature: 0.4,
+      max_tokens: 1500,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
 
-    if (!Number.isFinite(uid) || uid <= 0) {
-      res.status(400).json({ ok: false, error: 'Invalid or missing userId' });
-      return;
+    const raw = completion.choices?.[0]?.message?.content?.toString() || "";
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Попробуем выдрать JSON из текста (редкий случай)
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        parsed = JSON.parse(raw.slice(start, end + 1));
+      } else {
+        return bad(res, "Model did not return valid JSON", 500);
+      }
     }
 
-    const counts = await getUnderExploredTags(uid);
-    const selected = pickLeastSeenTags(counts, limit);
+    const arr = Array.isArray(parsed?.questions) ? parsed.questions : [];
+    if (!arr.length) return bad(res, "No questions generated", 500);
 
-    // здесь можно добавить генерацию вопросов через OpenAI по выбранным тегам
-    res.status(200).json({ ok: true, selectedTags: selected, debugCounts: counts });
-  } catch (e: any) {
-    res.status(500).json({ ok: false, error: e?.message ?? 'Unknown error' });
+    // Нормализуем вопросы и добавим метаданные
+    const questions: TestQuestion[] = arr.slice(0, numQuestions).map((q: any, i: number) => {
+      const id = String(q?.id || `q_${i + 1}`);
+      const question = String(q?.question || "").trim();
+      const options = Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : [];
+      const answerIndex = Number(q?.answerIndex);
+      const tags = Array.isArray(q?.tags) ? q.tags.map((t: any) => String(t)) : [];
+
+      if (!question || options.length !== 4 || !Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex > 3) {
+        throw new Error(`Invalid question at index ${i}`);
+      }
+
+      const mergedTags = Array.from(new Set([...(inputTags || []), ...tags])).slice(0, 6);
+
+      return {
+        id,
+        question,
+        options,
+        answerIndex,
+        tags: mergedTags,
+        difficulty,
+        topic,
+        subjectId,
+      };
+    });
+
+    const payload: GeneratedTest = {
+      subjectId,
+      topic,
+      difficulty,
+      questions,
+    };
+
+    return res.status(200).json(payload);
+  } catch (err: any) {
+    console.error("generate-test error:", err?.response?.data || err?.message || err);
+    return bad(res, "Failed to generate test", 500);
   }
 }

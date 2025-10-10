@@ -105,3 +105,21 @@ model Test {
   // связь в обратную сторону из QuestionTagResult
   questionTagResults QuestionTagResult[]
 }
+
+
+model TestAttempt {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  subjectId   Int
+  topic       String
+  difficulty  String
+  total       Int
+  correct     Int
+  accuracy    Float
+  byTag       Json
+  byQuestion  Json
+  rawQuestions Json
+  rawAnswers   Json
+  createdAt   DateTime @default(now())
+  @@index([userId, subjectId, createdAt])
+}

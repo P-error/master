@@ -1,222 +1,225 @@
-import { useState, useEffect } from "react";
-
-type Question = {
-  question: string;
-  options: string[];
-  correct: string;
-  tags?: string[];
-};
+import { useState } from "react";
+import type { GeneratedTest, TestQuestion } from "./api/generate-test";
+import type { TestResult } from "./api/submitTest";
 
 export default function TestPage() {
-  const [topic, setTopic] = useState("");
-  const [difficulty, setDifficulty] = useState("md"); // ez | md | hd
-  const [numQuestions, setNumQuestions] = useState(5);
-  const [numOptions, setNumOptions] = useState(4);
-  const [subjectId, setSubjectId] = useState<string>("free");
-  const [mode, setMode] = useState<"normal" | "comfort" | "random">("normal");
+  const [subjectId, setSubjectId] = useState<number>(1);
+  const [topic, setTopic] = useState<string>("Probability basics");
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [numQuestions, setNumQuestions] = useState<number>(8);
+  const [tags, setTags] = useState<string>("probability,bayes"); // через запятую
 
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ score: number; accuracy: number } | null>(null);
+  const [generated, setGenerated] = useState<GeneratedTest | null>(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<number | null>(null);
 
-  const [subjects, setSubjects] = useState<any[]>([]);
-
-  // Загружаем предметы
-  useEffect(() => {
-    async function fetchSubjects() {
-      try {
-        const res = await fetch("/api/subjects");
-        const data = await res.json();
-        setSubjects(data.subjects || []); // ✅ берём массив из объекта
-      } catch (err) {
-        console.error("Failed to load subjects:", err);
-        setSubjects([]);
-      }
-    }
-    fetchSubjects();
-  }, []);
-
-  // Генерация теста
-  async function handleGenerateTest() {
-    if (!topic.trim()) {
-      alert("Введите тему теста");
-      return;
-    }
+  async function generateTest(e: React.FormEvent) {
+    e.preventDefault();
     setLoading(true);
+    setError(null);
     setResult(null);
-    setQuestions([]);
-    setAnswers([]);
+    setSavedId(null);
 
     try {
       const res = await fetch("/api/generate-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          subjectId,
           topic,
           difficulty,
           numQuestions,
-          numOptions,
-          mode,
+          tags: tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
         }),
       });
       const data = await res.json();
-      if (data.questions) {
-        setQuestions(data.questions);
-        setAnswers(new Array(data.questions.length).fill(""));
-      } else {
-        console.error("Ошибка генерации:", data.error);
-      }
-    } catch (err) {
-      console.error("Generate test error:", err);
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      const test: GeneratedTest = data;
+      setGenerated(test);
+      setAnswers(new Array(test.questions.length).fill(-1));
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate test");
     } finally {
       setLoading(false);
     }
   }
 
-  // Выбор ответа
-  function handleAnswer(questionIndex: number, option: string) {
-    const newAnswers = [...answers];
-    newAnswers[questionIndex] = option;
-    setAnswers(newAnswers);
+  function selectAnswer(qIndex: number, optIndex: number) {
+    setAnswers((prev) => {
+      const next = [...prev];
+      next[qIndex] = optIndex;
+      return next;
+    });
   }
 
-  // Завершение теста
-  async function handleSubmitTest() {
-    if (!questions.length) return;
+  async function submitTest() {
+    if (!generated) return;
+    if (answers.some((a) => a < 0)) {
+      setError("Ответь на все вопросы перед отправкой");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/submitTest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: generated.subjectId,
+          topic: generated.topic,
+          difficulty: generated.difficulty,
+          questions: generated.questions,
+          answers,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      setResult(data as TestResult);
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit test");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveAttempt() {
+    if (!generated || !result) return;
+    setLoading(true);
+    setError(null);
+    setSavedId(null);
 
     try {
       const res = await fetch("/api/save-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subjectId: subjectId === "free" ? null : Number(subjectId),
-          topic,
-          difficulty,
-          questions,
+          subjectId: generated.subjectId,
+          topic: generated.topic,
+          difficulty: generated.difficulty,
+          questions: generated.questions,
           answers,
+          result,
         }),
       });
-
       const data = await res.json();
-      if (res.ok && data.test) {
-        setResult({ score: data.test.score, accuracy: data.accuracy });
-      } else {
-        console.error("Submit test error:", data.error);
-      }
-    } catch (err) {
-      console.error("Submit test error:", err);
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setSavedId(data.id);
+    } catch (err: any) {
+      setError(err?.message || "Failed to save attempt (are you logged in?)");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 p-6 border rounded-lg shadow bg-white dark:bg-gray-900 dark:text-white">
-      <h1 className="text-2xl font-bold mb-4">Тесты</h1>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <h1 className="text-2xl font-semibold">Test</h1>
 
-      {/* Настройки теста */}
-      <div className="space-y-3 mb-6">
-        <input
-          type="text"
-          placeholder="Введите тему теста"
-          className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-        />
-
-        {/* Выбор предмета */}
-        <select
-          className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-          value={subjectId}
-          onChange={(e) => setSubjectId(e.target.value)}
-        >
-          <option value="free">Свободная тема</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.difficulty})
-            </option>
-          ))}
-        </select>
-
-        {/* Режим генерации */}
-        <div className="flex flex-col gap-2">
-          <label className="font-medium">Режим вопросов</label>
+      {/* Генерация */}
+      <form onSubmit={generateTest} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div className="md:col-span-1">
+          <label className="block text-sm mb-1">Subject ID</label>
+          <input
+            type="number"
+            className="w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-900"
+            value={subjectId}
+            onChange={(e) => setSubjectId(Number(e.target.value))}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm mb-1">Topic</label>
+          <input
+            className="w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-900"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="e.g., Probability basics"
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1">Difficulty</label>
           <select
-            className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-            value={mode}
-            onChange={(e) => setMode(e.target.value as any)}
+            className="w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-900"
+            value={difficulty}
+            onChange={(e) => setDifficulty(e.target.value as any)}
           >
-            <option value="normal">Обычный (80% академично, 20% исследование)</option>
-            <option value="comfort">Комфортный (100% по предпочтениям)</option>
-            <option value="random">Случайный (100% случайные теги)</option>
+            <option value="easy">easy</option>
+            <option value="medium">medium</option>
+            <option value="hard">hard</option>
           </select>
         </div>
-
-        {subjectId === "free" && (
-          <>
-            <label className="font-medium">Сложность</label>
-            <select
-              className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-            >
-              <option value="ez">Лёгкий</option>
-              <option value="md">Средний</option>
-              <option value="hd">Сложный</option>
-            </select>
-          </>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm mb-1">Количество вопросов</label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-              value={numQuestions}
-              onChange={(e) => setNumQuestions(Number(e.target.value))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Вариантов ответа в каждом</label>
-            <input
-              type="number"
-              min={2}
-              max={6}
-              className="w-full border p-2 rounded bg-white dark:bg-gray-800"
-              value={numOptions}
-              onChange={(e) => setNumOptions(Number(e.target.value))}
-            />
-          </div>
+        <div>
+          <label className="block text-sm mb-1">Questions</label>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            className="w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-900"
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(Number(e.target.value))}
+          />
         </div>
 
-        <button
-          onClick={handleGenerateTest}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Генерация..." : "Сгенерировать тест"}
-        </button>
-      </div>
+        <div className="md:col-span-3">
+          <label className="block text-sm mb-1">Tags (comma-separated)</label>
+          <input
+            className="w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-900"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="probability,bayes,entropy"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-10 rounded-md bg-indigo-600 text-white disabled:opacity-50"
+          >
+            {loading ? "Generating..." : "Generate test"}
+          </button>
+        </div>
+      </form>
+
+      {error && <div className="text-sm text-red-600 dark:text-red-400">Ошибка: {error}</div>}
 
       {/* Вопросы */}
-      {questions.length > 0 && (
+      {generated && (
         <div className="space-y-4">
-          {questions.map((q, i) => (
-            <div key={i} className="border p-3 rounded bg-white dark:bg-gray-800">
-              <p className="font-semibold">{q.question}</p>
-              <div className="space-y-1 mt-2">
-                {q.options.map((opt, j) => (
-                  <label key={j} className="block">
+          <div className="text-sm opacity-70">
+            Topic: <b>{generated.topic}</b>, Difficulty: <b>{generated.difficulty}</b>
+          </div>
+          {generated.questions.map((q: TestQuestion, i: number) => (
+            <div key={q.id} className="border rounded-md p-4 bg-white dark:bg-gray-900">
+              <div className="text-sm mb-2 opacity-70">
+                Tags: {q.tags.join(", ")}
+              </div>
+              <div className="font-medium mb-3">
+                {i + 1}. {q.question}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {q.options.map((opt, oi) => (
+                  <label
+                    key={oi}
+                    className={`flex items-center gap-2 border rounded-md p-2 cursor-pointer ${
+                      answers[i] === oi ? "border-indigo-500" : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  >
                     <input
                       type="radio"
-                      name={`q-${i}`}
-                      value={opt}
-                      checked={answers[i] === opt}
-                      onChange={() => handleAnswer(i, opt)}
-                    />{" "}
-                    {opt}
+                      name={`q_${i}`}
+                      checked={answers[i] === oi}
+                      onChange={() => selectAnswer(i, oi)}
+                    />
+                    <span>{opt}</span>
                   </label>
                 ))}
               </div>
@@ -224,20 +227,46 @@ export default function TestPage() {
           ))}
 
           <button
-            onClick={handleSubmitTest}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            onClick={submitTest}
+            disabled={loading}
+            className="px-4 py-2 rounded-md bg-green-600 text-white disabled:opacity-50"
           >
-            Завершить тест
+            {loading ? "Submitting..." : "Submit"}
           </button>
         </div>
       )}
 
       {/* Результат */}
       {result && (
-        <div className="mt-6 p-4 bg-gray-100 dark:bg-gray-800 border rounded">
-          <h2 className="text-xl font-bold">Результаты</h2>
-          <p>Баллы: {result.score} / {questions.length}</p>
-          <p>Точность: {result.accuracy}%</p>
+        <div className="space-y-4">
+          <div className="text-lg font-semibold">
+            Result: {result.correct}/{result.total} ({Math.round(result.accuracy * 100)}%)
+          </div>
+
+          <div className="border rounded-md p-4 bg-white dark:bg-gray-900">
+            <div className="font-medium mb-2">Per-tag accuracy</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Object.entries(result.byTag).map(([tag, v]) => (
+                <div key={tag} className="border rounded-md p-2">
+                  <div className="text-sm font-medium">{tag}</div>
+                  <div className="text-sm opacity-80">
+                    {v.correct}/{v.total} ({Math.round(v.accuracy * 100)}%)
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={saveAttempt}
+              disabled={loading}
+              className="px-4 py-2 rounded-md bg-indigo-600 text-white disabled:opacity-50"
+            >
+              {loading ? "Saving..." : "Save attempt"}
+            </button>
+            {savedId && <div className="text-sm opacity-80">Saved id: {savedId}</div>}
+          </div>
         </div>
       )}
     </div>
