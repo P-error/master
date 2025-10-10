@@ -1,25 +1,16 @@
-import { ReactNode } from "react";
-import Link from "next/link";
+import type { ReactNode } from "react";
+import Navbar from "@/components/NavBar";
 
-type LayoutProps = {
-  children: ReactNode;
-};
-
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <div>
-      <nav className="flex gap-4 bg-gray-200 p-4">
-        <Link href="/">Home</Link>
-        <Link href="/profile">Profile</Link>
-        <Link href="/chat">Chat</Link>
-        <Link href="/test">Test</Link>
-        <Link href="/subjects">Subjects</Link>
-        <Link href="/statistics">Statistics</Link>
-        <Link href="/settings">Settings</Link>
-        <Link href="/login">Login</Link>
-        <Link href="/register">Register</Link>
-      </nav>
-      <main className="p-6">{children}</main>
+    <div className="min-h-dvh flex flex-col bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      <Navbar />
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
+      <footer className="border-t border-gray-200 dark:border-gray-800 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+        © {new Date().getFullYear()} EduAI — Adaptive Learning Platform
+      </footer>
     </div>
   );
 }
