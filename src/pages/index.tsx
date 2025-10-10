@@ -1,4 +1,7 @@
 export default function Home() {
-    return <h1 className="text-2xl font-bold">Welcome to Home Page</h1>;
-  }
-  
+  return (
+    <div className="p-6 bg-blue-500 text-white rounded-xl shadow">
+      Tailwind OK (prod test)
+    </div>
+  );
+}
