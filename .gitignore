@@ -19,3 +19,6 @@ dist/
 # Logs & misc
 *.log
 .DS_Store
+
+# local sqlite
+prisma/dev.db
