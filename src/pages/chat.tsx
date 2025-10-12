@@ -1,241 +1,303 @@
+import Head from "next/head";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Send, Bot, User, Trash2 } from "lucide-react";
-import { fadeUp } from "@/lib/motion";
+import { useRouter } from "next/router";
+import { motion } from "framer-motion";
+import { fadeVariants, trans } from "@/lib/motion";
+import { Loader2, SendHorizontal, AlertTriangle } from "lucide-react";
+import ChatMessage from "@/components/ChatMessage";
+import TypingDots from "@/components/TypingDots";
 
-type ChatRole = "system" | "user" | "assistant";
-type ChatMessage = { role: ChatRole; content: string };
+type Role = "user" | "assistant" | "system";
+type Msg = { id: string; role: Role; content: string; createdAt?: string };
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "system", content: "You are a helpful assistant." },
-  ]);
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(true);
+  const [unauthorized, setUnauthorized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [typing, setTyping] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [assistantTyping, setAssistantTyping] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
-  const visibleMessages = useMemo(
-    () => messages.filter((m) => m.role !== "system"),
-    [messages]
-  );
-
+  // автоскролл к последнему сообщению
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = listRef.current;
     if (!el) return;
-    const toBottom = () => el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    toBottom();
-    const t = setTimeout(toBottom, 120);
-    return () => clearTimeout(t);
-  }, [visibleMessages.length, loading]);
+    el.scrollTop = el.scrollHeight;
+  }, [messages, assistantTyping]);
 
+  // загрузка истории
   useEffect(() => {
-    const ta = inputRef.current;
-    if (!ta) return;
-    ta.style.height = "0px";
-    const h = Math.min(ta.scrollHeight, 160);
-    ta.style.height = h + "px";
-  }, [input]);
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      setUnauthorized(false);
+      try {
+        const urls = [
+          "/api/chat/history",
+          "/api/chat/messages",
+          "/api/messages",
+          "/api/chat", // GET может отдавать последние сообщения
+        ];
+        let ok = false;
+        let data: any = null;
 
-  async function sendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    const content = input.trim();
-    if (!content || loading) return;
+        for (const url of urls) {
+          const res = await fetch(url, {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }).catch(() => null as any);
 
-    const next = [...messages, { role: "user", content }];
-    setMessages(next);
+          if (!res) continue;
+          if (res.status === 401) {
+            setUnauthorized(true);
+            ok = false;
+            break;
+          }
+          if (res.ok) {
+            data = await res.json().catch(() => ({}));
+            ok = true;
+            break;
+          }
+        }
+
+        if (!ok) {
+          if (!unauthorized) throw new Error("Не удалось загрузить историю.");
+          return;
+        }
+
+        const list: Msg[] = normalizeHistory(data);
+        if (!alive) return;
+        setMessages(list);
+      } catch (e: any) {
+        if (!alive) return;
+        setError(e?.message || "Ошибка загрузки.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || sending) return;
     setInput("");
-    setErrorMsg(null);
-    setLoading(true);
-    setTyping(true);
+
+    const userMsg: Msg = {
+      id: "u-" + Date.now().toString(36),
+      role: "user",
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setAssistantTyping(true);
+    setSending(true);
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: next,
-          model: "gpt-4o-mini",
-          temperature: 0.6,
-          max_tokens: 600,
-        }),
-      });
+      // Собираем компактную историю (можно урезать до 12 последних)
+      const history = toPayloadHistory([...messages, userMsg]).slice(-12);
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.detail || data?.error || `HTTP ${res.status}`);
+      const urls = [
+        "/api/chat",
+        "/api/chat/send",
+        "/api/messages",
+        "/api/ask",
+      ];
 
-      const contentResp = (data?.content ?? "").toString();
-      setMessages((prev) => [...prev, { role: "assistant", content: contentResp }]);
-    } catch (err: any) {
-      console.error("Chat error:", err);
-      setErrorMsg(err?.message || "Request failed");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            "Извини, не удалось получить ответ. Проверь соединение и логи /api/chat (Vercel Functions).",
-        },
-      ]);
+      let ok = false;
+      let data: any = null;
+      for (const url of urls) {
+        const res = await fetch(url, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, history }),
+        }).catch(() => null as any);
+
+        if (!res) continue;
+        if (res.status === 401) {
+          setUnauthorized(true);
+          ok = false;
+          break;
+        }
+        if (res.ok) {
+          data = await res.json().catch(() => ({}));
+          ok = true;
+          break;
+        }
+      }
+
+      if (!ok) {
+        throw new Error(unauthorized ? "Требуется вход." : "Не удалось отправить сообщение.");
+      }
+
+      const assistantMsg = normalizeAssistant(data);
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (e: any) {
+      setError(e?.message || "Ошибка отправки.");
+      // откат ввода, если нужно:
+      // setInput(text);
     } finally {
-      setLoading(false);
-      setTyping(false);
-      inputRef.current?.focus();
+      setAssistantTyping(false);
+      setSending(false);
     }
   }
 
-  function clearChat() {
-    setMessages([{ role: "system", content: "You are a helpful assistant." }]);
-    setErrorMsg(null);
-    setTimeout(() => inputRef.current?.focus(), 10);
-  }
+  const showEmpty = useMemo(() => !loading && !error && !unauthorized && messages.length === 0, [loading, error, unauthorized, messages]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
-      <motion.div {...fadeUp(0.02)} className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Чат с ИИ</h1>
+    <>
+      <Head>
+        <title>Chat — EduAI</title>
+      </Head>
+
+      <section className="mx-auto flex h-[calc(100dvh-9rem)] max-w-4xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+        <motion.div variants={fadeVariants(0)} initial="hidden" animate="show" className="mb-3">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tutor Chat</h1>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            Задавай вопросы по темам обучения, проси разбор решений и примеры.
+            Задавайте вопросы по предметам — ассистент отвечает по шагам.
           </p>
-        </div>
-        <button
-          type="button"
-          onClick={clearChat}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/60 px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-white/80 dark:bg-gray-900/50 dark:text-gray-300"
-          title="Очистить диалог"
+        </motion.div>
+
+        {/* Список сообщений */}
+        <div
+          ref={listRef}
+          className="relative flex-1 overflow-y-auto rounded-2xl border border-white/10 bg-white/60 p-3 shadow-soft dark:bg-white/5"
         >
-          <Trash2 className="h-4 w-4" />
-          Очистить
-        </button>
-      </motion.div>
-
-      <motion.div
-        {...fadeUp(0.06)}
-        className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/60 shadow-sm backdrop-blur dark:bg-gray-900/50"
-      >
-        <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -left-12 -bottom-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
-
-        <div ref={scrollRef} className="h-[60vh] w-full overflow-y-auto px-4 py-4 md:px-6 md:py-6">
-          <AnimatePresence initial={false}>
-            {visibleMessages.length === 0 && (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
-              >
-                Спроси что-нибудь: например, <i>“Объясни теорему Байеса на примере”</i>.
-              </motion.div>
-            )}
-
-            {visibleMessages.map((m, i) => {
-              const isUser = m.role === "user";
-              return (
-                <motion.div
-                  key={`${m.role}-${i}-${m.content.slice(0, 12)}`}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  className={`mb-3 flex ${isUser ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl border px-3 py-2 text-sm shadow transition md:px-4 md:py-3 ${
-                      isUser
-                        ? "border-indigo-500/30 bg-indigo-500/10 text-gray-900 dark:text-gray-100"
-                        : "border-white/20 bg-white/70 text-gray-900 dark:border-white/10 dark:bg-gray-950/40 dark:text-gray-100"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide opacity-70">
-                      {isUser ? "user" : "assistant"}
-                    </div>
-                    <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
-                  </div>
-                </motion.div>
-              );
-            })}
-
-            {typing && (
-              <motion.div
-                key="typing"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="mb-3 flex justify-start"
-              >
-                <div className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/70 px-3 py-2 text-sm text-gray-700 shadow dark:border-white/10 dark:bg-gray-950/40 dark:text-gray-300">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Модель печатает…
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <AnimatePresence>
-          {errorMsg && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="mx-4 mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300 md:mx-6"
-            >
-              Ошибка: {errorMsg}
-            </motion.div>
+          {loading && (
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading…
+            </div>
           )}
-        </AnimatePresence>
 
-        <div className="border-t border-white/10 bg-white/50 p-3 backdrop-blur dark:bg-gray-900/40 md:p-4">
-          <form onSubmit={sendMessage} className="flex items-end gap-2">
-            <div className="relative flex-1">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                maxLength={5000}
-                placeholder="Напиши сообщение…"
-                className="max-h-40 w-full resize-none rounded-xl border border-white/20 bg-white/70 px-3 py-2 pr-12 text-sm outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-gray-950/40"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage(e as any);
-                  }
-                }}
-              />
-              <div className="pointer-events-none absolute bottom-2 right-3 text-xs text-gray-500 dark:text-gray-400">
-                {input.length}/5000
+          {!loading && unauthorized && (
+            <div className="rounded-2xl border border-white/10 bg-white/60 p-5 dark:bg-white/5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
+                <div>
+                  <div className="text-sm font-semibold">Sign in required</div>
+                  <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                    Войдите, чтобы пользоваться чатом.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a href="/login" className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg">
+                      Log in
+                    </a>
+                    <a
+                      href="/register"
+                      className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200"
+                    >
+                      Create account
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={loading || input.trim().length === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow transition hover:brightness-110 disabled:opacity-60"
-              title="Отправить"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {loading ? "Отправка" : "Отправить"}
-            </button>
-          </form>
-        </div>
-      </motion.div>
+          )}
 
-      <motion.div
-        {...fadeUp(0.08)}
-        className="rounded-xl border border-white/10 bg-white/60 p-4 text-sm text-gray-700 shadow-sm backdrop-blur dark:bg-gray-900/50 dark:text-gray-300"
-      >
-        Подсказка: задавайте конкретные учебные запросы, например:
-        <span className="ml-1 rounded-md bg-white/70 px-2 py-0.5 font-mono text-xs dark:bg-gray-950/40">
-          “Реши задачу по теореме Байеса с разбором шагов”
-        </span>
-        .
-      </motion.div>
-    </div>
+          {!loading && !unauthorized && error && (
+            <div className="rounded-2xl border border-white/10 bg-red-500/10 p-5 text-sm text-red-700 dark:text-red-400">
+              {error}
+            </div>
+          )}
+
+          {showEmpty && (
+            <div className="rounded-xl bg-white/70 p-4 text-sm text-gray-700 dark:bg-white/10 dark:text-gray-300">
+              Нет сообщений. Напишите вопрос внизу, например: <em>“Объясни теорему Пифагора по шагам.”</em>
+            </div>
+          )}
+
+          {!loading && !unauthorized && !error && messages.length > 0 && (
+            <div className="space-y-2">
+              {messages.map((m) => (
+                <ChatMessage key={m.id} role={m.role} content={m.content} createdAt={m.createdAt} />
+              ))}
+              {assistantTyping && <TypingDots />}
+            </div>
+          )}
+        </div>
+
+        {/* Композер */}
+        <div className="sticky bottom-0 z-10 mt-3">
+          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/60 p-2 shadow-soft backdrop-blur-xs dark:bg-white/5">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={unauthorized || sending}
+              placeholder="Напишите сообщение… (Ctrl/⌘ + Enter — отправить)"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-white/20 bg-white/70 px-3 py-2 text-sm text-gray-900 shadow-inner transition focus:border-[hsl(var(--ring))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] disabled:opacity-60 dark:border-white/10 dark:bg-white/10 dark:text-gray-100"
+            />
+
+            <div className="mt-2 flex items-center justify-between">
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                Подсказка: спрашивайте “почему” и “покажи пример”.
+              </div>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={unauthorized || sending || !input.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primaryFg transition hover:opacity-90 disabled:opacity-60"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+                {sending ? "Отправка…" : "Отправить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
+}
+
+/** Нормализация разных форматов истории */
+function normalizeHistory(raw: any): Msg[] {
+  // Варианты:
+  // - [{ id, role, content, createdAt }]
+  // - { messages: [...] }
+  // - { history: [...] }
+  const arr = Array.isArray(raw) ? raw : raw?.messages ?? raw?.history ?? [];
+  return (arr as any[]).map((m, i) => ({
+    id: String(m.id ?? `m-${i}`),
+    role: (m.role ?? "assistant") as Role,
+    content: String(m.content ?? m.text ?? ""),
+    createdAt: m.createdAt ?? undefined,
+  }));
+}
+
+function toPayloadHistory(list: Msg[]) {
+  return list.map((m) => ({ role: m.role, content: m.content }));
+}
+
+/** Нормализация ответа ассистента */
+function normalizeAssistant(raw: any): Msg {
+  // Возможные формы:
+  // - { id, role, content }
+  // - { message: { role, content } }
+  // - { reply: "text" }
+  const m = raw?.message ?? raw?.data ?? raw;
+  const content = m?.content ?? m?.reply ?? raw?.reply ?? "";
+  return {
+    id: "a-" + Date.now().toString(36),
+    role: "assistant",
+    content: String(content),
+    createdAt: new Date().toISOString(),
+  };
 }

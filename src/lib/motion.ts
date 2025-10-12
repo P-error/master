@@ -19,3 +19,10 @@ export const fadeVariants = (delay = 0): Variants => ({
   hidden: { y: 16, opacity: 0 },
   show: { y: 0, opacity: 1, transition: trans(delay) },
 });
+
+/** Небольшой скейл-эффект для hover/tap */
+export const scaleTap: Variants = {
+  initial: { scale: 1 },
+  hover: { scale: 1.02, transition: trans(0, 0.18) },
+  tap: { scale: 0.98, transition: trans(0, 0.12) },
+};

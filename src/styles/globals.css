@@ -2,42 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-/* System font stack for speed */
+/* === Design Tokens via CSS variables === */
 :root {
-  --ring: 99 102 241; /* indigo-500 */
+  /* HSL токены — удобны для смешения в темах */
+  --bg: 0 0% 100%;
+  --fg: 222 47% 11%;
+  --muted: 215 16% 91%;
+  --card: 0 0% 100%;
+  --primary: 243 75% 59%;      /* ~indigo-600 */
+  --primary-fg: 0 0% 100%;
+  --secondary: 292 84% 61%;    /* ~fuchsia-500 */
+  --secondary-fg: 0 0% 100%;
+  --ring: 243 75% 59%;
+
+  --radius-xl: 0.9rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
 }
 
+.dark {
+  --bg: 222 47% 5%;
+  --fg: 0 0% 100%;
+  --muted: 222 15% 16%;
+  --card: 224 36% 6%;
+  --primary: 243 85% 66%;
+  --primary-fg: 0 0% 100%;
+  --secondary: 292 90% 67%;
+  --secondary-fg: 0 0% 100%;
+  --ring: 243 85% 66%;
+}
+
+/* Base resets + smooth scroll */
 html {
   scroll-behavior: smooth;
 }
+body {
+  @apply bg-bg text-fg antialiased;
+}
 
+/* Text selection */
 ::selection {
-  background: rgba(99, 102, 241, 0.18);
+  background: hsl(var(--primary) / 0.18);
 }
 
-/* Light/Dark background base handled by Layout gradient */
-
-/* Smooth focus ring for inputs/buttons */
-@layer utilities {
-  .focus-ring:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(var(--ring) / 0.3);
-  }
+/* Links and focus states */
+a {
+  @apply underline-offset-2 decoration-transparent transition-colors;
+}
+a:hover {
+  @apply decoration-primary text-primary;
+}
+:focus-visible {
+  @apply outline-none ring-2 ring-offset-2 ring-[hsl(var(--ring))] ring-offset-bg;
 }
 
-/* Subtle card style (optional) */
-@layer components {
-  .card {
-    @apply rounded-2xl border border-white/10 bg-white/60 backdrop-blur dark:bg-gray-900/50;
-  }
+/* Better form elements */
+input, select, textarea {
+  @apply rounded-xl bg-white/60 dark:bg-white/5 border border-gray-200/80 dark:border-white/10
+         focus:ring-[hsl(var(--ring))] focus:border-[hsl(var(--ring))];
 }
 
-/* Container size tweak like Tailwind's .container but more comfy on very wide screens */
-.container {
-  max-width: 1120px;
-}
-
-/* Scrollbar styling (WebKit) */
+/* Scrollbars (WebKit) */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -53,7 +78,7 @@ html {
   background: rgba(107, 114, 128, 0.55);
 }
 
-/* Code/prose tweaks */
+/* Prose code */
 .prose code {
   @apply rounded bg-gray-800/10 px-1 py-0.5 text-[0.9em] dark:bg-white/10;
 }

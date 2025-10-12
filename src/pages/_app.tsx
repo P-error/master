@@ -1,3 +1,4 @@
+// src/pages/_app.tsx
 import type { AppProps } from "next/app";
 import { ThemeProvider } from "next-themes";
 import { AnimatePresence, motion } from "framer-motion";

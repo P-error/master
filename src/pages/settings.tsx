@@ -1,220 +1,372 @@
+import Head from "next/head";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-import { fadeUp } from "@/lib/motion";
-import {
-  Settings as SettingsIcon,
-  ShieldAlert,
-  Loader2,
-  Save,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  XCircle,
-} from "lucide-react";
+import { fadeVariants, trans } from "@/lib/motion";
+import { AlertTriangle, Loader2, Save, SlidersHorizontal } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useToast } from "@/lib/toast";
 
-type Me = { id: number; name: string; email: string };
+type Me = {
+  id: number;
+  login: string;
+  age?: number | null;
+  educationLevel?: string | null;
+  learningGoal?: string | null;
+  learningStyle?: string | null;
+  preferredFormat?: string | null;
+  preferredTone?: string | null;
+  detailLevel?: string | null;
+  priorKnowledge?: string | null;
+  languageLevel?: string | null;
+  darkMode?: boolean | null;
+  accessibleMode?: boolean | null;
+  fontSize?: string | null;
+  [k: string]: any;
+};
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { setTheme } = useTheme();
   const { notify } = useToast();
 
-  const [me, setMe] = useState<Me | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [unauthorized, setUnauthorized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [password1, setPassword1] = useState("");
-  const [password2, setPassword2] = useState("");
-  const [show1, setShow1] = useState(false);
-  const [show2, setShow2] = useState(false);
-
+  // form state
+  const [form, setForm] = useState<Me | null>(null);
   const [saving, setSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
 
+  // load current profile to prefill
   useEffect(() => {
+    let alive = true;
     (async () => {
+      setLoading(true);
+      setUnauthorized(false);
+      setError(null);
       try {
-        const res = await fetch("/api/me", { credentials: "include" });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) {
-          const user = {
-            id: Number(data.id ?? data.userId ?? 0),
-            name: String(data.name ?? data.username ?? "User"),
-            email: String(data.email ?? "unknown@example.com"),
-          };
-          setMe(user);
-          setName(user.name);
-        } else {
-          setMe(null);
+        const urls = ["/api/me", "/api/profile", "/api/user"];
+        let ok = false;
+        let data: any = null;
+        for (const url of urls) {
+          const res = await fetch(url, {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          }).catch(() => null as any);
+          if (!res) continue;
+          if (res.status === 401) {
+            setUnauthorized(true);
+            ok = false;
+            break;
+          }
+          if (res.ok) {
+            data = await res.json().catch(() => ({}));
+            ok = true;
+            break;
+          }
         }
-      } catch {
-        setMe(null);
+        if (!ok) {
+          if (!unauthorized) throw new Error("Не удалось загрузить профиль.");
+          return;
+        }
+        const u: Me = (data?.user ?? data) as Me;
+        if (!alive) return;
+        // Prefill form
+        setForm({
+          ...u,
+          fontSize: u.fontSize ?? "base",
+          darkMode: !!u.darkMode,
+          accessibleMode: !!u.accessibleMode,
+        });
+      } catch (e: any) {
+        if (!alive) return;
+        setError(e?.message || "Ошибка загрузки профиля.");
       } finally {
-        setAuthChecked(true);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg(null);
-    setOkMsg(null);
-
-    if (!me) {
-      const msg = "Вы не авторизованы.";
-      setErrorMsg(msg);
-      notify({ type: "error", title: "Ошибка", message: msg });
-      return;
-    }
-    if (password1 && password1.length < 6) {
-      const msg = "Пароль должен быть не меньше 6 символов.";
-      setErrorMsg(msg);
-      notify({ type: "error", title: "Ошибка", message: msg });
-      return;
-    }
-    if (password1 && password1 !== password2) {
-      const msg = "Пароли не совпадают.";
-      setErrorMsg(msg);
-      notify({ type: "error", title: "Ошибка", message: msg });
-      return;
-    }
-
+  async function handleSave() {
+    if (!form) return;
     setSaving(true);
     try {
-      const payload: any = { name };
-      if (password1) payload.password = password1;
+      const payload = {
+        // отправляем только ожидаемые поля профиля/настроек
+        age: numOrNull(form.age),
+        educationLevel: emptyToNull(form.educationLevel),
+        learningGoal: emptyToNull(form.learningGoal),
+        learningStyle: emptyToNull(form.learningStyle),
+        preferredFormat: emptyToNull(form.preferredFormat),
+        preferredTone: emptyToNull(form.preferredTone),
+        detailLevel: emptyToNull(form.detailLevel),
+        priorKnowledge: emptyToNull(form.priorKnowledge),
+        languageLevel: emptyToNull(form.languageLevel),
+        darkMode: !!form.darkMode,
+        accessibleMode: !!form.accessibleMode,
+        fontSize: form.fontSize || "base",
+      };
 
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      // первый успешный PATCH/PUT — победил
+      const urls: Array<[string, string]> = [
+        ["/api/profile", "PATCH"],
+        ["/api/profile", "PUT"],
+        ["/api/user", "PATCH"],
+        ["/api/user", "PUT"],
+        ["/api/settings", "PATCH"],
+        ["/api/settings", "PUT"],
+      ];
 
-      const ok = "Настройки сохранены.";
-      setOkMsg(ok);
-      setPassword1("");
-      setPassword2("");
-      notify({ type: "success", title: "Готово", message: ok });
-    } catch (err: any) {
-      const msg = err?.message || "Не удалось сохранить изменения.";
-      setErrorMsg(msg);
-      notify({ type: "error", title: "Ошибка", message: msg });
+      let ok = false;
+      for (const [url, method] of urls) {
+        const res = await fetch(url, {
+          method,
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => null as any);
+        if (!res) continue;
+        if (res.status === 401) {
+          setUnauthorized(true);
+          ok = false;
+          break;
+        }
+        if (res.ok) {
+          ok = true;
+          break;
+        }
+      }
+
+      if (!ok) throw new Error("Не удалось сохранить настройки.");
+
+      // синхронизируем тему UI сразу (если пользователь щёлкнул)
+      setTheme(form.darkMode ? "dark" : "light");
+
+      notify({ type: "success", message: "Настройки сохранены." });
+      router.push("/profile");
+    } catch (e: any) {
+      notify({ type: "error", message: e?.message || "Ошибка сохранения." });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <motion.div {...fadeUp(0.02)} className="flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Настройки</h1>
-          <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">Имя профиля и смена пароля.</p>
-        </div>
-        <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/60 px-3 py-2 text-sm shadow-sm backdrop-blur dark:bg-gray-900/50">
-          <SettingsIcon className="h-4 w-4 text-indigo-500" />
-          <span className="text-gray-700 dark:text-gray-300">Preferences</span>
-        </div>
-      </motion.div>
+    <>
+      <Head>
+        <title>Settings — EduAI</title>
+      </Head>
 
-      {authChecked && !me && (
-        <motion.div
-          {...fadeUp(0.04)}
-          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-300"
-        >
-          <div className="mb-1 font-medium">Вы не авторизованы</div>
-          <div>Войдите, чтобы редактировать настройки профиля.</div>
+      <section className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+        <motion.div variants={fadeVariants(0)} initial="hidden" animate="show" className="mb-4">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            <SlidersHorizontal className="h-6 w-6 text-primary" />
+            Settings
+          </h1>
+          <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+            Предпочтения обучения и отображения. Все поля — опциональны.
+          </p>
         </motion.div>
-      )}
 
-      <motion.form
-        {...fadeUp(0.06)}
-        onSubmit={handleSave}
-        className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/60 p-6 shadow-sm backdrop-blur dark:bg-gray-900/50"
-      >
-        <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
-        <div aria-hidden className="pointer-events-none absolute -left-12 -bottom-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
-
-        <label className="mb-1 block text-sm font-medium">Имя</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Ваше имя"
-          disabled={!me}
-          className="mb-3 w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 dark:border-white/10 dark:bg-gray-950/40"
-        />
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Новый пароль</label>
-            <div className="relative">
-              <input
-                type={show1 ? "text" : "password"}
-                value={password1}
-                onChange={(e) => setPassword1(e.target.value)}
-                placeholder="Оставьте пустым, если не меняете"
-                disabled={!me}
-                className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 pr-10 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 dark:border-white/10 dark:bg-gray-950/40"
-              />
-              <button
-                type="button"
-                onClick={() => setShow1((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                {show1 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium">Повторите новый пароль</label>
-            <div className="relative">
-              <input
-                type={show2 ? "text" : "password"}
-                value={password2}
-                onChange={(e) => setPassword2(e.target.value)}
-                placeholder="Ещё раз новый пароль"
-                disabled={!me}
-                className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 pr-10 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 dark:border-white/10 dark:bg-gray-950/40"
-              />
-              <button
-                type="button"
-                onClick={() => setShow2((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                {show2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {errorMsg && (
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-            <XCircle className="h-4 w-4" />
-            {errorMsg}
-          </div>
-        )}
-        {okMsg && (
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" />
-            {okMsg}
+        {loading && (
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading…
           </div>
         )}
 
-        <div className="mt-4">
-          <button
-            type="submit"
-            disabled={!me || saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow transition hover:brightness-110 disabled:opacity-60"
+        {!loading && unauthorized && (
+          <div className="rounded-2xl border border-white/10 bg-white/60 p-5 dark:bg-white/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
+              <div>
+                <div className="text-sm font-semibold">Sign in required</div>
+                <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                  Войдите, чтобы менять настройки.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !unauthorized && error && (
+          <div className="rounded-2xl border border-white/10 bg-red-500/10 p-5 text-sm text-red-700 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
+        {!loading && !unauthorized && !error && form && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0, transition: trans(0.04, 0.35) }}
+            className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/60 p-5 shadow-soft backdrop-blur-xs dark:bg-white/5"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Сохранение…" : "Сохранить"}
-          </button>
-        </div>
-      </motion.form>
+            <div aria-hidden className="pointer-events-none absolute -left-10 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -right-10 -bottom-10 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
+
+            {/* Learning block */}
+            <div className="mb-3 text-sm font-semibold">Learning profile</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <NumberField
+                label="Age"
+                value={form.age ?? ""}
+                onChange={(v) => setForm({ ...form, age: v === "" ? null : Number(v) })}
+              />
+              <TextField label="Education level" value={form.educationLevel ?? ""} onChange={(v) => setForm({ ...form, educationLevel: v })} />
+              <TextField label="Goal" value={form.learningGoal ?? ""} onChange={(v) => setForm({ ...form, learningGoal: v })} />
+              <TextField label="Style" value={form.learningStyle ?? ""} onChange={(v) => setForm({ ...form, learningStyle: v })} />
+              <TextField label="Preferred format" value={form.preferredFormat ?? ""} onChange={(v) => setForm({ ...form, preferredFormat: v })} />
+              <TextField label="Preferred tone" value={form.preferredTone ?? ""} onChange={(v) => setForm({ ...form, preferredTone: v })} />
+              <TextField label="Detail level" value={form.detailLevel ?? ""} onChange={(v) => setForm({ ...form, detailLevel: v })} />
+              <TextField label="Prior knowledge" value={form.priorKnowledge ?? ""} onChange={(v) => setForm({ ...form, priorKnowledge: v })} />
+              <TextField label="Language level" value={form.languageLevel ?? ""} onChange={(v) => setForm({ ...form, languageLevel: v })} />
+            </div>
+
+            {/* Display block */}
+            <div className="mt-6 mb-3 text-sm font-semibold">Display</div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SwitchField
+                label="Dark mode"
+                checked={!!form.darkMode}
+                onChange={(v) => setForm({ ...form, darkMode: v })}
+              />
+              <SwitchField
+                label="Accessible mode"
+                checked={!!form.accessibleMode}
+                onChange={(v) => setForm({ ...form, accessibleMode: v })}
+              />
+              <SelectField
+                label="Font size"
+                value={form.fontSize ?? "base"}
+                onChange={(v) => setForm({ ...form, fontSize: v })}
+                options={[
+                  { value: "sm", label: "Small" },
+                  { value: "base", label: "Base" },
+                  { value: "lg", label: "Large" },
+                ]}
+              />
+            </div>
+
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primaryFg transition hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? "Сохраняем…" : "Сохранить"}
+            </button>
+          </motion.div>
+        )}
+      </section>
+    </>
+  );
+}
+
+/* ---------- tiny field components (внутри страницы, без доп. файлов) ---------- */
+
+function TextField({
+  label,
+  value,
+  onChange,
+}: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder=""
+        className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm text-gray-900 shadow-inner transition focus:border-[hsl(var(--ring))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
+      />
     </div>
   );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+}: { label: string; value: number | string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        min={0}
+        className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm text-gray-900 shadow-inner transition focus:border-[hsl(var(--ring))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
+      />
+    </div>
+  );
+}
+
+function SwitchField({
+  label,
+  checked,
+  onChange,
+}: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-white/70 p-3 dark:bg-white/10">
+      <span className="text-sm">{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-10 items-center rounded-full transition ${
+          checked ? "bg-primary" : "bg-gray-300 dark:bg-gray-700"
+        }`}
+        aria-pressed={checked}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+            checked ? "translate-x-5" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm text-gray-900 shadow-inner transition focus:border-[hsl(var(--ring))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
+      >
+        {options.map((op) => (
+          <option key={op.value} value={op.value}>{op.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/* ---------- utils ---------- */
+function emptyToNull(v?: string | null) {
+  if (v == null) return null;
+  const t = String(v).trim();
+  return t === "" ? null : t;
+}
+function numOrNull(v: any) {
+  if (v === "" || v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
