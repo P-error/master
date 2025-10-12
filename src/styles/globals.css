@@ -2,8 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Тёмная тема для body */
-body.dark {
-  background-color: #1a202c; /* темный фон */
-  color: #f7fafc;           /* светлый текст */
+/* System font stack for speed */
+:root {
+  --ring: 99 102 241; /* indigo-500 */
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.18);
+}
+
+/* Light/Dark background base handled by Layout gradient */
+
+/* Smooth focus ring for inputs/buttons */
+@layer utilities {
+  .focus-ring:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--ring) / 0.3);
+  }
+}
+
+/* Subtle card style (optional) */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/10 bg-white/60 backdrop-blur dark:bg-gray-900/50;
+  }
+}
+
+/* Container size tweak like Tailwind's .container but more comfy on very wide screens */
+.container {
+  max-width: 1120px;
+}
+
+/* Scrollbar styling (WebKit) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(107, 114, 128, 0.35);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.55);
+}
+
+/* Code/prose tweaks */
+.prose code {
+  @apply rounded bg-gray-800/10 px-1 py-0.5 text-[0.9em] dark:bg-white/10;
 }

@@ -1,175 +1,134 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { fadeUp } from "@/lib/motion";
+import { User, Mail, BadgeCheck, ShieldAlert, Loader2, RefreshCw, Calendar } from "lucide-react";
+
+type Me = {
+  id: number;
+  name: string;
+  email: string;
+  createdAt?: string;
+};
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<any>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchProfile() {
-      try {
-        const res = await fetch("/api/profile");
-        const data = await res.json();
-        setProfile(data);
-      } catch (err) {
-        console.error("Failed to load profile:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchProfile();
-  }, []);
-
-  async function handleSave() {
-    setSaving(true);
+  async function load() {
+    setLoading(true);
+    setErrorMsg(null);
     try {
-      const res = await fetch("/api/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+      const res = await fetch("/api/me", { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setMe({
+        id: Number(data.id ?? data.userId ?? 0),
+        name: String(data.name ?? data.username ?? "User"),
+        email: String(data.email ?? "unknown@example.com"),
+        createdAt: data.createdAt ? String(data.createdAt) : undefined,
       });
-      const data = await res.json();
-      setProfile(data);
-    } catch (err) {
-      console.error("Save failed:", err);
+    } catch (err: any) {
+      setMe(null);
+      setErrorMsg(err?.message || "Не удалось загрузить профиль");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   }
 
-  if (loading) return <p className="p-4">Загрузка...</p>;
-  if (!profile) return <p className="p-4">Профиль не найден</p>;
+  useEffect(() => {
+    load();
+  }, []);
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 p-6 border rounded-lg shadow bg-white">
-      <h1 className="text-2xl font-bold mb-4">Профиль пользователя</h1>
+    <div className="mx-auto max-w-4xl space-y-8">
+      {/* Header */}
+      <motion.div {...fadeUp(0.02)} className="flex items-end justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Профиль</h1>
+          <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+            Данные аккаунта, статус и дата регистрации.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/60 px-3 py-2 text-sm text-gray-700 shadow-sm transition hover:bg-white/80 dark:bg-gray-900/50 dark:text-gray-300"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Обновить
+        </button>
+      </motion.div>
 
-      {/* Логин */}
-      <p className="mb-4">
-        <span className="font-semibold">Логин:</span> {profile.login}
-      </p>
+      {/* Not auth banner */}
+      {!loading && !me && (
+        <motion.div
+          {...fadeUp(0.04)}
+          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-300"
+        >
+          <div className="mb-1 flex items-center gap-2 font-medium">
+            <ShieldAlert className="h-4 w-4" />
+            Вы не авторизованы
+          </div>
+          <div>Войдите, чтобы видеть информацию профиля и сохранять результаты тестов.</div>
+        </motion.div>
+      )}
 
-      {/* Возраст */}
-      <input
-        type="number"
-        placeholder="Возраст"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.age || ""}
-        onChange={(e) => setProfile({ ...profile, age: Number(e.target.value) })}
-      />
-
-      {/* Уровень образования */}
-      <input
-        type="text"
-        placeholder="Уровень образования"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.educationLevel || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, educationLevel: e.target.value })
-        }
-      />
-
-      {/* Цели обучения */}
-      <input
-        type="text"
-        placeholder="Цель обучения"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.learningGoal || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, learningGoal: e.target.value })
-        }
-      />
-
-      {/* Стиль обучения */}
-      <input
-        type="text"
-        placeholder="Стиль обучения"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.learningStyle || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, learningStyle: e.target.value })
-        }
-      />
-
-      {/* Формат */}
-      <input
-        type="text"
-        placeholder="Предпочитаемый формат (текст, видео...)"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.preferredFormat || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, preferredFormat: e.target.value })
-        }
-      />
-
-      {/* Тон */}
-      <input
-        type="text"
-        placeholder="Тон изложения (формальный, дружелюбный...)"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.preferredTone || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, preferredTone: e.target.value })
-        }
-      />
-
-      {/* Детализация */}
-      <input
-        type="text"
-        placeholder="Уровень детализации"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.detailLevel || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, detailLevel: e.target.value })
-        }
-      />
-
-      {/* Предыдущие знания */}
-      <input
-        type="text"
-        placeholder="Предыдущие знания"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.priorKnowledge || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, priorKnowledge: e.target.value })
-        }
-      />
-
-      {/* Уровень языка */}
-      <input
-        type="text"
-        placeholder="Уровень языка"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.languageLevel || ""}
-        onChange={(e) =>
-          setProfile({ ...profile, languageLevel: e.target.value })
-        }
-      />
-
-      {/* Предпочитаемые предметы */}
-      <input
-        type="text"
-        placeholder="Предметы (через запятую)"
-        className="w-full border p-2 rounded mb-3"
-        value={profile.preferredSubjects?.join(", ") || ""}
-        onChange={(e) =>
-          setProfile({
-            ...profile,
-            preferredSubjects: e.target.value
-              .split(",")
-              .map((s) => s.trim())
-              .filter((s) => s),
-          })
-        }
-      />
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+      {/* Card */}
+      <motion.div
+        {...fadeUp(0.06)}
+        className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/60 p-6 shadow-sm backdrop-blur dark:bg-gray-900/50"
       >
-        {saving ? "Сохранение..." : "Сохранить"}
-      </button>
+        <div aria-hidden className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -left-12 -bottom-12 h-44 w-44 rounded-full bg-fuchsia-400/20 blur-3xl" />
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Загрузка профиля…
+          </div>
+        ) : me ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-white/15 bg-white/70 p-4 dark:border-white/10 dark:bg-gray-950/40">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <User className="h-4 w-4 text-indigo-500" />
+                Имя
+              </div>
+              <div className="text-base">{me.name}</div>
+            </div>
+
+            <div className="rounded-xl border border-white/15 bg-white/70 p-4 dark:border-white/10 dark:bg-gray-950/40">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Mail className="h-4 w-4 text-indigo-500" />
+                E-mail
+              </div>
+              <div className="text-base">{me.email}</div>
+            </div>
+
+            <div className="rounded-xl border border-white/15 bg-white/70 p-4 dark:border-white/10 dark:bg-gray-950/40">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <BadgeCheck className="h-4 w-4 text-indigo-500" />
+                Статус
+              </div>
+              <div className="text-base">Аккаунт активен</div>
+            </div>
+
+            <div className="rounded-xl border border-white/15 bg-white/70 p-4 dark:border-white/10 dark:bg-gray-950/40">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Calendar className="h-4 w-4 text-indigo-500" />
+                Дата регистрации
+              </div>
+              <div className="text-base">
+                {me.createdAt ? new Date(me.createdAt).toLocaleString() : "—"}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-700 dark:text-gray-300">
+            {errorMsg ?? "Нет данных профиля."}
+          </div>
+        )}
+      </motion.div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}', // если App Router не используешь, пусть всё равно будет
   ],
   theme: { extend: {} },
-  plugins: [],
+  plugins: [require("@tailwindcss/typography"), require("@tailwindcss/forms")],
   // временно подстрахуемся на проде
   safelist: [
     { pattern: /^(container|prose)$/ },
