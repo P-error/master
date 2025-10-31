@@ -1,22 +1,45 @@
-// ---------- Prisma Client ----------
+// =====================
+//  Prisma Client
+// =====================
 generator client {
   provider = "prisma-client-js"
 }
 
-// ---------- Database ----------
+// =====================
+//  Database
+// =====================
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// ---------- Models ----------
+// =====================
+//  Enums
+// =====================
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
 
+enum Mode {
+  ACADEMIC
+  COMFORT
+  RANDOM
+}
+
+// =====================
+//  Models
+// =====================
+
+// ---- Пользователь ----
 model User {
-  id       Int    @id @default(autoincrement())
-  login    String @unique
+  id       Int     @id @default(autoincrement())
+  login    String  @unique // нормализуй в нижний регистр на уровне приложения
   password String
+  email    String? @unique // опционально; тоже нормализуй в lower-case в приложении
 
-  // Профиль (опциональные поля, взято из фактического дампа)
+  // Профиль / предпочтения
   age             Int?
   educationLevel  String?
   learningGoal    String?
@@ -31,95 +54,195 @@ model User {
   fontSize        String  @default("base")
 
   // Связи
-  subjects           Subject[]
-  questionTagResults QuestionTagResult[]
-  chatMessages       ChatMessage[]
-  tests              Test[] // <-- добавили связь с тестами
+  subjects       Subject[]
+  chatMessages   ChatMessage[]
+  generatedTests GeneratedTest[]
+  testAttempts   TestAttempt[]
 
   // Метаданные
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+// ---- Сообщения чата (как было) ----
 model ChatMessage {
   id     Int  @id @default(autoincrement())
   userId Int
-  user   User @relation(fields: [userId], references: [id]) // прямая сторона
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role    String // 'user' | 'assistant' (можно валидировать на уровне приложения)
+  role    String // 'user' | 'assistant' (валидация в приложении)
   content String
 
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
+// ---- Предмет пользователя ----
+// ВАЖНО: предметы различаются по сложности (name + difficulty уникальны в рамках пользователя)
 model Subject {
-  id         Int    @id @default(autoincrement())
-  name       String
-  difficulty String
-
-  // Владелец предмета
+  id     Int  @id @default(autoincrement())
   userId Int
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  difficulty  Difficulty
+  description String?
 
   // Метаданные
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tests Test[] // <-- тесты по предмету (опционально, если используешь subjectId)
+  // Связи
+  generatedTests GeneratedTest[]
+  testAttempts   TestAttempt[]
+  // нормализованные вопросы по тестам этого предмета
+  normalizedQuestions TestQuestion[]
 
-  // Один и тот же пользователь не должен иметь дубликаты имён предметов
-  @@unique([name, userId], name: "name_userId")
+  @@unique([userId, name, difficulty], name: "subject_user_name_difficulty")
+  @@index([userId, updatedAt])
 }
 
-model QuestionTagResult {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  tags      String[] // <-- массив строк
-  isCorrect Boolean?
-  createdAt DateTime @default(now())
-  testId    Int? // <-- нужен для привязки результата к тесту
-  question  String? // <-- текст вопроса (если хочешь хранить)
-  Test      Test?    @relation(fields: [testId], references: [id])
-}
-
-model Test {
+// ---- Сгенерированный тест (СЕССИЯ ГЕНЕРАЦИИ) ----
+// Фиксирует условия/содержимое выдачи LLM.
+// Может быть несохраняемым (например, свободная тема без привязки к предмету).
+model GeneratedTest {
   id     Int  @id @default(autoincrement())
   userId Int
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   subjectId Int?
-  subject   Subject? @relation(fields: [subjectId], references: [id])
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
+  // Параметры генерации
   topic        String
-  difficulty   String
+  difficulty   Difficulty
+  mode         Mode
+  savable      Boolean    @default(false) // можно ли сохранять попытки в историю/статистику
+  tagsVersion  String     @default("v1") // версия легенды тегов
+  refinements  String[]   // уточнения (до 10)
   numQuestions Int
-  numOptions   Int
-  score        Int
-  questions    Json // сырой JSON с вопросами
+  numOptions   Int        @default(4) // если хочешь иметь запасной дефолт
+
+  // Снимок предпочтений на момент генерации (для корректного анализа)
+  prefSnapshot Json?
+
+  // План и фактические данные
+  plannedTagsPerQuestion Json // массив массивов тегов (план)
+  questions              Json // полный набор вопросов (включая tags и answerIndex)
+
+  // Экспериментальные метаданные (для A/B, причинного анализа)
+  experimentArm String? // например: "A", "B", "C" или "academic/comfort/random"
+  tagStrategy   String? // человекочитаемое описание распределения
 
   createdAt DateTime @default(now())
-  // updatedAt можно добавить при желании:
-  // updatedAt DateTime  @updatedAt
+  updatedAt DateTime @updatedAt
 
-  // связь в обратную сторону из QuestionTagResult
-  questionTagResults QuestionTagResult[]
+  // Связи
+  testAttempts        TestAttempt[]
+  TrainingExample     TrainingExample[]
+  // Нормализованные вопросы (отдельные строки) — отдельное имя поля, чтобы не конфликтовать с scalar `questions`
+  normalizedQuestions TestQuestion[]
+
+  @@index([userId, createdAt])
+  @@index([subjectId, createdAt])
 }
 
+// ---- Нормализованный вопрос теста ----
+// Позволяет быстро валидировать ответы и считать точность по тегам/темам.
+model TestQuestion {
+  id              Int           @id @default(autoincrement())
+  generatedTestId Int
+  generatedTest   GeneratedTest @relation(fields: [generatedTestId], references: [id], onDelete: Cascade)
 
+  subjectId  Int
+  subject    Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  qIndex      Int          // позиция в тесте 0..N-1
+  prompt      String       // текст вопроса
+  options     String[]     // варианты ответов
+  answerIndex Int          // индекс правильного ответа
+  tags        String[]     // массив нормализованных тегов
+
+  @@unique([generatedTestId, qIndex]) // на один тест позиция вопроса уникальна
+  @@index([subjectId])
+  @@index([tags], type: Gin)          // GIN-индекс массива тегов (Postgres)
+}
+
+// ---- Попытка прохождения (ФАКТ ОТВЕТОВ) ----
+// Ссылается на конкретный GeneratedTest.
+// Может иметь subjectId = NULL (если тест был несохраняемым или связка добавится позже).
 model TestAttempt {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  subjectId   Int
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  generatedTestId Int
+  generatedTest   GeneratedTest @relation(fields: [generatedTestId], references: [id], onDelete: Cascade)
+
+  subjectId Int?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  // Дублируем ключевые условия для удобства выборок/аналитики «как было в тот момент»
   topic       String
-  difficulty  String
-  total       Int
-  correct     Int
-  accuracy    Float
-  byTag       Json
-  byQuestion  Json
-  rawQuestions Json
-  rawAnswers   Json
-  createdAt   DateTime @default(now())
-  @@index([userId, subjectId, createdAt])
+  difficulty  Difficulty
+  mode        Mode
+  tagsVersion String
+
+  // Результаты
+  total      Int
+  correct    Int
+  accuracy   Float
+  byTag      Json // { tag: { total, correct, accuracy? }, ... }
+  byQuestion Json // массив по вопросам: выбранный индекс, верность, теги
+  rawAnswers Json // массив выбранных индексов
+
+  // Время/длительность
+  durationMs  Int?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  // Экспериментальные метки
+  experimentArm String?
+
+  @@index([userId, createdAt])
+  @@index([subjectId, createdAt])
+  @@index([generatedTestId])
+}
+
+// ---- Обучающая выборка для будущей модели маркировки ----
+// Нормализованные строки: вопрос, его теги, правильный ответ.
+// Заполняется после генерации (и/или после валидации тегов).
+model TrainingExample {
+  id              Int           @id @default(autoincrement())
+  generatedTestId Int
+  generatedTest   GeneratedTest @relation(fields: [generatedTestId], references: [id], onDelete: Cascade)
+
+  subjectId  Int?
+  topic      String
+  difficulty Difficulty
+
+  questionId   String // id вопроса в JSON генерации
+  qIndex       Int    // позиция в тесте
+  text         String @db.Text
+  options      Json
+  correctIndex Int
+  tags         String[] // нормализованные коды тегов
+
+  createdAt DateTime @default(now())
+
+  @@index([generatedTestId, qIndex])
+  @@index([subjectId, createdAt])
+  @@index([tags], type: Gin) // GIN-индекс по массиву тегов (Postgres)
+}
+
+// ---- Версионированная легенда тегов (опционально) ----
+// Позволяет хранить «tags.txt» в БД и ссылаться на конкретную версию.
+model TagLegendVersion {
+  id        Int      @id @default(autoincrement())
+  version   String   @unique
+  content   String   @db.Text // полный текст легенды (как сейчас передаётся в LLM)
+  checksum  String?
+  createdAt DateTime @default(now())
 }
