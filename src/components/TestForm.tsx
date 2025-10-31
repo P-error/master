@@ -21,7 +21,6 @@ type Props = {
 };
 
 export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
-  // ↓↓↓ ПРАВКА: допускаем необязательные поля в дефолтах
   const dv: Partial<GenPayload> = {
     subjectId: defaultValues?.subjectId,
     topic: defaultValues?.topic ?? "",
@@ -30,16 +29,14 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
     goal: defaultValues?.goal ?? 80,
   };
 
-  // ↓↓↓ ПРАВКА: безопасные дефолты для useState
   const [topic, setTopic] = useState<string>(dv.topic ?? "");
   const [subjectId, setSubjectId] = useState<number | undefined>(dv.subjectId);
-  const [subjectQuery, setSubjectQuery] = useState<string>(""); // всегда строка для SubjectAutocomplete
+  const [subjectQuery, setSubjectQuery] = useState<string>("");
   const [difficulty, setDifficulty] = useState<Difficulty>(dv.difficulty ?? "MEDIUM");
   const [count, setCount] = useState<number>(dv.count ?? 10);
   const [goal, setGoal] = useState<number>(dv.goal ?? 80);
 
   useEffect(() => {
-    // ↓↓↓ ПРАВКА: Partial и без `?? undefined`
     const next: Partial<GenPayload> = {
       subjectId: defaultValues?.subjectId,
       topic: defaultValues?.topic ?? "",
@@ -84,7 +81,7 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
 
   return (
     <motion.form
-      variants={fadeVariants}
+      variants={fadeVariants()}  {/* <-- вызов функции */}
       initial="hidden"
       animate="visible"
       className="space-y-4"
