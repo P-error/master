@@ -29,12 +29,12 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
     goal: defaultValues?.goal ?? 80,
   };
 
-  const [topic, setTopic] = useState<string>(dv.topic);
+  const [topic, setTopic] = useState<string>(dv.topic ?? "");
   const [subjectId, setSubjectId] = useState<number | undefined>(dv.subjectId);
   const [subjectQuery, setSubjectQuery] = useState<string>(""); // всегда строка для SubjectAutocomplete
-  const [difficulty, setDifficulty] = useState<Difficulty>(dv.difficulty);
-  const [count, setCount] = useState<number>(dv.count);
-  const [goal, setGoal] = useState<number>(dv.goal);
+  const [difficulty, setDifficulty] = useState<Difficulty>(dv.difficulty ?? "MEDIUM");
+  const [count, setCount] = useState<number>(dv.count ?? 10);
+  const [goal, setGoal] = useState<number>(dv.goal ?? 80);
 
   useEffect(() => {
     const next: Required<GenPayload> = {
