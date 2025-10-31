@@ -10,18 +10,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { fadeVariants, trans } from "@/lib/motion";
 
 const linksMain = [
-  { href: "/", label: "Home", match: "equal" as const },
-  { href: "/subjects", label: "Subjects", match: "startsWith" as const },
-  { href: "/statistics", label: "Statistics", match: "startsWith" as const },
-  { href: "/test", label: "Test", match: "startsWith" as const },
-  { href: "/chat", label: "Chat", match: "startsWith" as const },
+  { href: "/", label: "Главная", match: "equal" as const },
+  { href: "/subjects", label: "Предметы", match: "startsWith" as const },
+  { href: "/statistics", label: "Статистика", match: "startsWith" as const },
+  { href: "/test", label: "Тест", match: "startsWith" as const },
+  { href: "/chat", label: "Чат", match: "startsWith" as const },
 ];
 
 const linksAuth = [
-  { href: "/login", label: "Login", match: "equal" as const },
-  { href: "/register", label: "Register", match: "equal" as const },
-  { href: "/profile", label: "Profile", match: "startsWith" as const },
-  { href: "/settings", label: "Settings", match: "startsWith" as const },
+  { href: "/login", label: "Вход", match: "equal" as const },
+  { href: "/register", label: "Регистрация", match: "equal" as const },
+  { href: "/profile", label: "Профиль", match: "startsWith" as const },
+  { href: "/settings", label: "Настройки", match: "startsWith" as const },
 ];
 
 export default function NavBar() {
@@ -58,7 +58,7 @@ export default function NavBar() {
         animate={{ y: 0, opacity: 1, transition: trans(0, 0.35) }}
         className="mx-2 mt-2 rounded-2xl border border-white/10 bg-white/60 shadow-glass backdrop-blur-xs
                    dark:bg-white/5 sm:mx-4 sm:mt-4"
-        aria-label="Primary"
+        aria-label="Основная навигация"
       >
         <div className="flex items-center justify-between px-4 py-2 sm:px-5">
           <Link href="/" className="group inline-flex items-center gap-2 rounded-xl p-1">
@@ -103,8 +103,8 @@ export default function NavBar() {
               type="button"
               onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}
               className="ml-2 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/60 text-gray-700 transition hover:shadow-soft dark:bg-white/5 dark:text-gray-200"
-              aria-label="Toggle theme"
-              title="Toggle theme"
+              aria-label="Переключить тему"
+              title="Переключить тему"
             >
               {mounted && currentTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -116,8 +116,8 @@ export default function NavBar() {
               type="button"
               onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}
               className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/60 text-gray-700 transition hover:shadow-soft dark:bg-white/5 dark:text-gray-200"
-              aria-label="Toggle theme"
-              title="Toggle theme"
+              aria-label="Переключить тему"
+              title="Переключить тему"
             >
               {mounted && currentTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -127,7 +127,7 @@ export default function NavBar() {
               onClick={() => setOpen((v) => !v)}
               className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/60 text-gray-700 transition hover:shadow-soft dark:bg-white/5 dark:text-gray-200"
               aria-expanded={open}
-              aria-label="Open menu"
+              aria-label="Открыть меню"
             >
               {open ? <X size={18} /> : <Menu size={18} />}
             </button>
@@ -187,7 +187,7 @@ export default function NavBar() {
                   }}
                   className="mt-1 rounded-md px-2 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
-                  {mounted && currentTheme === "dark" ? "Light mode" : "Dark mode"}
+                  {mounted && currentTheme === "dark" ? "Светлая тема" : "Тёмная тема"}
                 </button>
               </div>
             </motion.div>

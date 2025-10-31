@@ -1,74 +1,74 @@
+// src/pages/api/save-test.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { verify } from "jsonwebtoken";
-import { parse } from "cookie";
-import { prisma } from "@/lib/prisma"; // твой singleton
-import type { TestQuestion } from "./generate-test";
-import type { TestResult } from "./submitTest";
+import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
 
-type SaveBody = {
-  subjectId: number;
-  topic: string;
-  difficulty: "easy" | "medium" | "hard";
-  questions: TestQuestion[];
-  answers: number[];
-  result: TestResult; // объект из /api/submitTest
+type ResultIn = {
+  total: number;
+  correct: number;
+  accuracy: number;
+  byTag?: Record<string, { total: number; correct: number }>;
+  byQuestion?: any;
 };
 
-function bad(res: NextApiResponse, msg: string, code = 400) {
-  return res.status(code).json({ error: msg });
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return bad(res, "Method not allowed", 405);
-
-  // ---- auth (как у тебя в раннем коде)
-  const cookies = req.headers.cookie ? parse(req.headers.cookie) : {};
-  const token = cookies.token;
-  if (!token) return bad(res, "Not authenticated", 401);
-
-  let userId: number;
-  try {
-    const decoded = verify(token, process.env.JWT_SECRET || "dev_secret") as { userId: number };
-    userId = decoded.userId;
-  } catch {
-    return bad(res, "Invalid token", 401);
+  const auth = requireUser(req);
+  if (!auth) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
 
-  let body: SaveBody;
-  try {
-    body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-  } catch {
-    return bad(res, "Invalid JSON");
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    res.status(405).json({ error: "Method Not Allowed" });
+    return;
   }
 
-  const { subjectId, topic, difficulty, questions, answers, result } = body || {};
-  if (!subjectId || !topic || !difficulty) return bad(res, "Missing subjectId/topic/difficulty");
-  if (!Array.isArray(questions) || !questions.length) return bad(res, "questions required");
-  if (!Array.isArray(answers) || answers.length !== questions.length) return bad(res, "answers length mismatch");
-  if (!result || typeof result !== "object") return bad(res, "result required");
-
   try {
-    // Примерная схема сохранения — подставь свои модели
-    // Пример: TestAttempt { id, userId, subjectId, topic, difficulty, total, correct, accuracy, byTag (JSON), createdAt }
-    const attempt = await prisma.testAttempt.create({
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body ?? {});
+    const subjectId = Number(body.subjectId);
+    const topic = String(body.topic ?? "").trim();
+    const difficulty = String(body.difficulty ?? "").trim() || "medium";
+    const questions = body.questions;
+    const answers = body.answers;
+    const result: ResultIn = body.result;
+
+    if (!Number.isFinite(subjectId)) return res.status(400).json({ error: "subjectId is required" });
+    if (!topic) return res.status(400).json({ error: "topic is required" });
+    if (!Array.isArray(questions) || !Array.isArray(answers)) {
+      return res.status(400).json({ error: "questions and answers must be arrays" });
+    }
+    if (!result || typeof result.total !== "number" || typeof result.correct !== "number") {
+      return res.status(400).json({ error: "result is invalid" });
+    }
+
+    // Проверка владения предметом
+    const subject = await prisma.subject.findFirst({
+      where: { id: subjectId, userId: auth.userId },
+      select: { id: true },
+    });
+    if (!subject) return res.status(404).json({ error: "Subject not found" });
+
+    const created = await prisma.testAttempt.create({
       data: {
-        userId,
+        userId: auth.userId,
         subjectId,
         topic,
         difficulty,
         total: result.total,
         correct: result.correct,
-        accuracy: result.accuracy,
-        byTag: result.byTag as any,
-        byQuestion: result.byQuestion as any,
-        rawQuestions: questions as any,
-        rawAnswers: answers as any,
+        accuracy: result.total > 0 ? result.correct / result.total : 0,
+        byTag: result.byTag ?? {},
+        byQuestion: result.byQuestion ?? [],
+        rawQuestions: questions,
+        rawAnswers: answers,
       },
+      select: { id: true, createdAt: true },
     });
 
-    return res.status(200).json({ ok: true, id: attempt.id });
-  } catch (err: any) {
-    console.error("save-test error:", err?.message || err);
-    return bad(res, "Failed to save attempt", 500);
+    res.status(200).json({ ok: true, id: created.id, createdAt: created.createdAt });
+  } catch (err) {
+    console.error("[/api/save-test] error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 }

@@ -11,51 +11,51 @@ export default function HomePage() {
   return (
     <>
       <Head>
-        <title>EduAI — Adaptive Learning Platform</title>
+        <title>EduAI — Платформа адаптивного обучения</title>
         <meta
           name="description"
-          content="Personalized tests, adaptive content and chat-based tutoring. Raise your score with EduAI."
+          content="Персонализированные тесты и адаптивный контент. Повышайте свои результаты с EduAI."
         />
       </Head>
 
       <Hero />
 
-      <Section title="What you can do" subtitle="Key flows of the platform">
+      <Section title="Что вы можете сделать" subtitle="Ключевые сценарии платформы">
         <FeatureGrid
           items={[
             {
-              title: "Generate Tests",
+              title: "Генерация тестов",
               desc:
-                "Create personalized quizzes by subject and difficulty. The system adapts to your goal score.",
+                "Создавайте персонализированные викторины по предмету и сложности. Система подстраивается под ваш целевой балл.",
               href: "/test",
-              cta: "Start a test",
+              cta: "Начать тест",
             },
             {
-              title: "Study by Subjects",
+              title: "Обучение по предметам",
               desc:
-                "Browse subjects, track progress, and get tailored recommendations.",
+                "Просматривайте предметы, отслеживайте прогресс и получайте персональные рекомендации.",
               href: "/subjects",
-              cta: "Explore subjects",
+              cta: "Изучить предметы",
             },
             {
-              title: "Tutor Chat",
+              title: "Чат с EduAI",
               desc:
-                "Ask questions and get step-by-step hints. Context-aware, polite, on your level.",
+                "Задавайте вопросы и получайте пошаговые подсказки. Контекстно, вежливо и на вашем уровне.",
               href: "/chat",
-              cta: "Open chat",
+              cta: "Открыть чат",
             },
             {
-              title: "Statistics",
+              title: "Статистика",
               desc:
-                "See trends of attempts, accuracy, and time-to-solve with clean charts.",
+                "Смотрите тренды по попыткам, точности и времени решения на наглядных графиках.",
               href: "/statistics",
-              cta: "View stats",
+              cta: "Посмотреть статистику",
             },
           ]}
         />
       </Section>
 
-      <Section title="Get started now" subtitle="Log in to save your progress">
+      <Section title="Начните сейчас" subtitle="Войдите, чтобы сохранить прогресс">
         <div className="grid gap-3 sm:grid-cols-2">
           <motion.div
             variants={fadeVariants(0)}
@@ -64,15 +64,15 @@ export default function HomePage() {
             viewport={{ once: true, margin: "-50px" }}
             className="rounded-2xl bg-white/70 p-5 shadow-soft transition will-change-transform hover:shadow-ring dark:bg-white/5"
           >
-            <h3 className="text-base font-semibold">I already have an account</h3>
+            <h3 className="text-base font-semibold">У меня уже есть аккаунт</h3>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              Continue where you left off. Your tests and progress will sync.
+              Продолжайте с того места, где остановились. Ваши тесты и прогресс синхронизируются.
             </p>
             <Link
               href="/login"
               className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primaryFg transition hover:opacity-90"
             >
-              Log in
+              Войти
             </Link>
           </motion.div>
 
@@ -83,15 +83,15 @@ export default function HomePage() {
             viewport={{ once: true, margin: "-50px" }}
             className="rounded-2xl bg-white/70 p-5 shadow-soft transition will-change-transform hover:shadow-ring dark:bg-white/5"
           >
-            <h3 className="text-base font-semibold">I’m new here</h3>
+            <h3 className="text-base font-semibold">Я здесь впервые</h3>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              Create an account to unlock adaptive tests and personalized tutoring.
+              Создайте аккаунт, чтобы открыть адаптивные тесты и персонализированное обучение.
             </p>
             <Link
               href="/register"
               className="mt-4 inline-flex items-center justify-center rounded-xl bg-secondary px-4 py-2 text-sm font-medium text-secondaryFg transition hover:opacity-90"
             >
-              Create account
+              Создать аккаунт
             </Link>
           </motion.div>
         </div>

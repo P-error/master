@@ -47,16 +47,16 @@ function SubjectCardBase({
 
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-gray-600 dark:text-gray-400">
-          Progress
+          Прогресс
         </span>
         <span className="text-xs font-medium">{progress}%</span>
       </div>
       <ProgressBar value={progress} />
 
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
-        <div>Attempts: <span className="font-medium text-gray-800 dark:text-gray-200">{attempts}</span></div>
+        <div>Попытки: <span className="font-medium text-gray-800 dark:text-gray-200">{attempts}</span></div>
         <div className="text-right">
-          {lastActivity ? new Date(lastActivity).toLocaleDateString() : "—"}
+          {lastActivity ? new Date(lastActivity).toLocaleDateString("ru-RU") : "—"}
         </div>
       </div>
 
@@ -66,17 +66,17 @@ function SubjectCardBase({
           className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primaryFg transition hover:opacity-90"
         >
           <Play className="h-4 w-4" />
-          Start test
+          Начать тест
         </button>
 
         {onOpenDetails && (
           <button
             onClick={onOpenDetails}
             className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/20 bg-white/60 px-3 py-2 text-sm font-medium text-gray-900 hover:shadow-ring dark:bg-white/10 dark:text-gray-200"
-            aria-label="Open details"
-            title="Open details"
+            aria-label="Открыть подробности"
+            title="Открыть подробности"
           >
-            Details
+            Подробности
             <ChevronRight className="h-4 w-4" />
           </button>
         )}

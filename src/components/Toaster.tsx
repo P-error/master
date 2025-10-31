@@ -44,7 +44,7 @@ export default function Toaster() {
                 <button
                   onClick={() => remove(t.id)}
                   className="rounded-md p-1 text-gray-700 transition hover:bg-white/60 dark:text-gray-300 dark:hover:bg-white/10"
-                  aria-label="Close toast"
+                  aria-label="Закрыть уведомление"
                 >
                   ✕
                 </button>

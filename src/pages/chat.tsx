@@ -158,12 +158,12 @@ export default function ChatPage() {
   return (
     <>
       <Head>
-        <title>Chat — EduAI</title>
+        <title>Чат — EduAI</title>
       </Head>
 
       <section className="mx-auto flex h-[calc(100dvh-9rem)] max-w-4xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <motion.div variants={fadeVariants(0)} initial="hidden" animate="show" className="mb-3">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tutor Chat</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Чат с EduAI</h1>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
             Задавайте вопросы по предметам — ассистент отвечает по шагам.
           </p>
@@ -177,7 +177,7 @@ export default function ChatPage() {
           {loading && (
             <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading…
+              Загрузка…
             </div>
           )}
 
@@ -186,19 +186,19 @@ export default function ChatPage() {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
                 <div>
-                  <div className="text-sm font-semibold">Sign in required</div>
+                  <div className="text-sm font-semibold">Требуется вход</div>
                   <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
                     Войдите, чтобы пользоваться чатом.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <a href="/login" className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg">
-                      Log in
+                      Войти
                     </a>
                     <a
                       href="/register"
                       className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200"
                     >
-                      Create account
+                      Создать аккаунт
                     </a>
                   </div>
                 </div>
@@ -275,7 +275,7 @@ function normalizeHistory(raw: any): Msg[] {
   // - { history: [...] }
   const arr = Array.isArray(raw) ? raw : raw?.messages ?? raw?.history ?? [];
   return (arr as any[]).map((m, i) => ({
-    id: String(m.id ?? `m-${i}`),
+    id: String(m.id ?? `м-${i}`),
     role: (m.role ?? "assistant") as Role,
     content: String(m.content ?? m.text ?? ""),
     createdAt: m.createdAt ?? undefined,

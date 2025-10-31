@@ -1,188 +1,301 @@
+// src/pages/index.tsx
 import Head from "next/head";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { motion } from "framer-motion";
-import { fadeVariants, scaleTap, trans } from "@/lib/motion";
-import SubjectCard, { Subject } from "@/components/SubjectCard";
-import Link from "next/link";
-import { AlertTriangle, Loader2, Search } from "lucide-react";
 
-type ApiSubject = Record<string, any>;
+type Difficulty = "EASY" | "MEDIUM" | "HARD";
+
+type SubjectItem = {
+  id: number;
+  name: string;
+  difficulty: Difficulty;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count: {
+    generatedTests: number;
+    testAttempts: number;
+  };
+  lastAttempt?: {
+    id: number;
+    createdAt: string;
+    accuracy: number; // %
+    total: number;
+    correct: number;
+  } | null;
+};
+
+type ApiListRes =
+  | { ok: true; items: SubjectItem[] }
+  | { error: string };
+
+type ApiCreateRes =
+  | { ok: true; subject: SubjectItem }
+  | { error: string };
 
 export default function SubjectsPage() {
   const router = useRouter();
+  const [items, setItems] = useState<SubjectItem[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [err, setErr] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [unauthorized, setUnauthorized] = useState(false);
-  const [items, setItems] = useState<ApiSubject[]>([]);
+  // search
   const [q, setQ] = useState("");
+  const [pendingQ, setPendingQ] = useState("");
+
+  // creation form
+  const [name, setName] = useState("");
+  const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
+  const [description, setDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  // load subjects
+  async function fetchSubjects(query: string = "") {
+    setLoading(true);
+    setErr(null);
+    try {
+      const qs = new URLSearchParams();
+      if (query.trim()) qs.set("q", query.trim());
+      // no-store to avoid 304 and stale lists
+      const res = await fetch(`/api/subjects${qs.toString() ? `?${qs.toString()}` : ""}`, {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        cache: "no-store",
+        credentials: "include",
+      });
+      const data: ApiListRes = await res.json();
+      if (!res.ok || "error" in data) {
+        throw new Error((data as any)?.error || `Failed: ${res.status}`);
+      }
+      setItems(data.items);
+    } catch (e: any) {
+      setErr(e?.message || "Не удалось загрузить предметы");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      setUnauthorized(false);
-      try {
-        const res = await fetch("/api/subjects", {
-          method: "GET",
-          credentials: "include",
-          headers: { Accept: "application/json" },
-        });
-        if (res.status === 401) {
-          if (!alive) return;
-          setUnauthorized(true);
-          setItems([]);
-          return;
-        }
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({} as any));
-          throw new Error(data?.error || `HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as ApiSubject[] | { subjects: ApiSubject[] };
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray((data as any).subjects)
-          ? (data as any).subjects
-          : [];
-        if (!alive) return;
-        setItems(list);
-      } catch (e: any) {
-        if (!alive) return;
-        setError(e?.message || "Failed to load subjects.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    fetchSubjects("");
   }, []);
 
-  const normalized: Subject[] = useMemo(() => {
-    return items.map((s: ApiSubject) => {
-      const id = String(
-        s.id ?? s.subjectId ?? s.slug ?? s.code ?? Math.random().toString(36).slice(2)
-      );
-      const name = s.name ?? s.title ?? s.subjectName ?? "Unnamed subject";
-      const description = s.description ?? s.summary ?? s.about ?? "No description provided.";
-      const progress = clamp0to100(s.progress ?? s.completion ?? s.stats?.progress ?? 0);
-      const attempts = s.attempts ?? s.stats?.attempts ?? 0;
-      const lastActivity = s.updatedAt ?? s.lastActivity ?? s.stats?.lastActivity ?? null;
-      return { id, name, description, progress, attempts, lastActivity };
-    });
-  }, [items]);
+  // search submit
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setQ(pendingQ);
+    fetchSubjects(pendingQ);
+  };
 
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return normalized;
-    return normalized.filter(
-      (s) =>
-        s.name.toLowerCase().includes(qq) || s.description.toLowerCase().includes(qq)
-    );
-  }, [normalized, q]);
+  // create new subject
+  async function onCreate(e: React.FormEvent) {
+    e.preventDefault();
+    const nm = name.trim();
+    if (!nm) {
+      setErr("Введите название предмета");
+      return;
+    }
+    setCreating(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/subjects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+        body: JSON.stringify({
+          name: nm,
+          difficulty,
+          description: description.trim() || null,
+        }),
+      });
+      const data: ApiCreateRes = await res.json();
+      if (!res.ok || "error" in data) {
+        throw new Error((data as any)?.error || `Ошибка создания: ${res.status}`);
+      }
+      // prepend new subject
+      setItems((prev) => prev ? [data.subject, ...prev] : [data.subject]);
+      // reset form
+      setName("");
+      setDescription("");
+      setDifficulty("MEDIUM");
+    } catch (e: any) {
+      setErr(e?.message || "Не удалось создать предмет");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const hasItems = useMemo(() => (items?.length ?? 0) > 0, [items]);
 
   return (
     <>
       <Head>
-        <title>Subjects — EduAI</title>
+        <title>Мои предметы</title>
       </Head>
 
-      <section className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <motion.div variants={fadeVariants(0)} initial="hidden" animate="show" className="mb-4">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Subjects</h1>
-          <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            Choose a subject to start an adaptive test or continue where you left off.
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold">Предметы</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Создавайте предметы, запускайте тесты и отслеживайте точность по тегам.
           </p>
-        </motion.div>
+        </header>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0, transition: trans(0.03, 0.3) }}
-          className="relative mb-4"
-        >
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search subjects…"
-            className="w-full rounded-xl border border-white/20 bg-white/70 px-9 py-2 text-sm text-gray-900 shadow-inner transition focus:border-[hsl(var(--ring))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
-          />
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        </motion.div>
+        {/* Search + refresh */}
+        <section className="mb-6">
+          <form onSubmit={onSearch} className="flex gap-2">
+            <input
+              value={pendingQ}
+              onChange={(e) => setPendingQ(e.target.value)}
+              placeholder="Поиск по названию..."
+              className="w-full rounded border px-3 py-2 outline-none focus:ring"
+            />
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
+              disabled={loading}
+            >
+              Найти
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPendingQ(""); setQ(""); fetchSubjects(""); }}
+              className="rounded bg-gray-100 px-4 py-2 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              Сброс
+            </button>
+          </form>
+        </section>
 
-        {loading && (
-          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading subjects…
-          </div>
-        )}
-
-        {!loading && unauthorized && (
-          <div className="rounded-2xl border border-white/10 bg-white/60 p-5 dark:bg-white/5">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
-              <div>
-                <div className="text-sm font-semibold">Sign in required</div>
-                <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-                  Please log in to view your subjects.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link href="/login" className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg">
-                    Log in
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200"
-                  >
-                    Create account
-                  </Link>
-                </div>
-              </div>
+        {/* Create subject */}
+        <section className="mb-10 rounded-lg border p-4">
+          <h2 className="mb-3 text-lg font-semibold">Создать предмет</h2>
+          <form onSubmit={onCreate} className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="md:col-span-1">
+              <label className="mb-1 block text-sm">Название</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Например: Матанализ"
+                className="w-full rounded border px-3 py-2 outline-none focus:ring"
+              />
             </div>
-          </div>
-        )}
-
-        {!loading && !unauthorized && error && (
-          <div className="rounded-2xl border border-white/10 bg-red-500/10 p-5 text-sm text-red-700 dark:text-red-400">
-            Failed to load subjects: {error}
-          </div>
-        )}
-
-        {!loading && !unauthorized && !error && filtered.length === 0 && (
-          <div className="rounded-2xl border border-white/10 bg-white/60 p-5 text-sm text-gray-700 dark:bg-white/5 dark:text-gray-300">
-            No subjects found. Try a different keyword.
-          </div>
-        )}
-
-        {!loading && !unauthorized && !error && filtered.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((s, i) => (
-              <motion.div
-                key={s.id}
-                variants={fadeVariants(0.02 * i)}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true, margin: "-60px" }}
+            <div className="md:col-span-1">
+              <label className="mb-1 block text-sm">Сложность</label>
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                className="w-full rounded border px-3 py-2 outline-none focus:ring"
               >
-                <motion.div variants={scaleTap} initial="initial" whileHover="hover" whileTap="tap">
-                  <SubjectCard
-                    subject={s}
-                    onStart={() => router.push(`/test?subject=${encodeURIComponent(s.id)}`)}
-                  />
-                </motion.div>
-              </motion.div>
-            ))}
+                <option value="EASY">EASY</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HARD">HARD</option>
+              </select>
+            </div>
+            <div className="md:col-span-1">
+              <label className="mb-1 block text-sm">Описание (опц.)</label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Краткое описание"
+                className="w-full rounded border px-3 py-2 outline-none focus:ring"
+              />
+            </div>
+            <div className="md:col-span-3">
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {creating ? "Создаём..." : "Создать"}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Errors */}
+        {err && (
+          <div className="mb-6 rounded border border-red-300 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200">
+            {err}
           </div>
         )}
-      </section>
+
+        {/* List */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
+              {q ? `Результаты поиска: “${q}”` : "Мои предметы"}
+            </h2>
+            <button
+              onClick={() => fetchSubjects(q)}
+              className="rounded bg-gray-100 px-3 py-2 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+              disabled={loading}
+            >
+              Обновить
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="py-12 text-center text-gray-500">Загрузка…</div>
+          ) : !hasItems ? (
+            <div className="rounded border border-dashed p-8 text-center text-gray-500">
+              Предметы не найдены. Создайте первый предмет выше.
+            </div>
+          ) : (
+            <ul className="grid gap-4 md:grid-cols-2">
+              {items!.map((s) => (
+                <li key={s.id} className="rounded-lg border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-semibold">{s.name}</h3>
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">
+                          {s.difficulty}
+                        </span>
+                      </div>
+                      {s.description && (
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                          {s.description}
+                        </p>
+                      )}
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-4">
+                        <div>Тестов: {s._count.generatedTests}</div>
+                        <div>Попыток: {s._count.testAttempts}</div>
+                        {s.lastAttempt ? (
+                          <>
+                            <div>Посл. точность: {s.lastAttempt.accuracy}%</div>
+                            <div>
+                              {s.lastAttempt.correct}/{s.lastAttempt.total}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="col-span-2 italic">Нет попыток</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => router.push(`/test?subject=${encodeURIComponent(s.id)}`)}
+                        className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+                      >
+                        Начать тест
+                      </button>
+                      <button
+                        onClick={() => router.push(`/stats/subject?subjectId=${encodeURIComponent(s.id)}`)}
+                        className="rounded bg-gray-100 px-3 py-2 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      >
+                        Статистика
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </main>
     </>
   );
-}
-
-function clamp0to100(v: any): number {
-  const n = Number.isFinite(v) ? Number(v) : 0;
-  if (n < 0) return 0;
-  if (n > 100) return 100;
-  return Math.round(n);
 }

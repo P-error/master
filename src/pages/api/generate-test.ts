@@ -1,148 +1,286 @@
+// src/pages/api/generate-test.ts
 import type { NextApiRequest, NextApiResponse } from "next";
+import { requireUser } from "@/lib/auth";
 import OpenAI from "openai";
+import { prisma } from "@/lib/prisma";
 
-type GenerateBody = {
+type DiffLower = "easy" | "medium" | "hard";
+type DiffPrisma = "EASY" | "MEDIUM" | "HARD";
+type ModeLower = "academic" | "comfort" | "random";
+type ModePrisma = "ACADEMIC" | "COMFORT" | "RANDOM";
+
+type Body = {
+  subject?: string;
   subjectId?: number;
   topic?: string;
-  difficulty?: "easy" | "medium" | "hard";
-  numQuestions?: number;
-  tags?: string[]; // опционально: явно подсказать теги (например ["probability","bayes"])
-  model?: string;
+  difficulty?: string;
+  mode?: string;
+  count?: number;
+  goal?: number;
+  refinements?: string[];
+  tagsVersion?: string;
 };
 
-export type TestQuestion = {
+type RawQuestion = {
+  id?: string | number;
+  qid?: string | number;
+  question?: string;
+  text?: string;
+  options?: string[];
+  answers?: string[];
+  answerIndex?: number;
+  correctIndex?: number;
+  tags?: string[];
+  [k: string]: any;
+};
+
+type StoredQuestion = {
   id: string;
   question: string;
-  options: string[];
-  answerIndex: number; // 0..n-1
-  tags: string[]; // тематические метки
-  difficulty: "easy" | "medium" | "hard";
-  topic: string;
-  subjectId: number;
+  options?: string[];
+  answerIndex?: number;
+  tags?: string[];
 };
 
-export type GeneratedTest = {
-  subjectId: number;
-  topic: string;
-  difficulty: "easy" | "medium" | "hard";
-  questions: TestQuestion[];
-};
+const DEBUG = process.env.DEBUG_GEN === "1";
 
-function bad(res: NextApiResponse, msg: string, code = 400) {
+function log(...args: any[]) {
+  if (DEBUG) console.log("[GEN]", ...args);
+}
+
+function bad(res: NextApiResponse, code: number, msg: string) {
   return res.status(code).json({ error: msg });
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return bad(res, "Method not allowed", 405);
+function toDiffLower(d: any): DiffLower {
+  const v = String(d ?? "").toUpperCase();
+  if (v === "EASY") return "easy";
+  if (v === "HARD") return "hard";
+  return "medium";
+}
+function toDiffPrisma(d: any): DiffPrisma {
+  const v = String(d ?? "").toUpperCase();
+  if (v === "EASY" || v === "MEDIUM" || v === "HARD") return v as DiffPrisma;
+  if (v === "easy") return "EASY";
+  if (v === "hard") return "HARD";
+  return "MEDIUM";
+}
+function toModeLower(m: any): ModeLower {
+  const v = String(m ?? "").toUpperCase();
+  if (v === "COMFORT") return "comfort";
+  if (v === "RANDOM") return "random";
+  return "academic";
+}
+function toModePrisma(m: any): ModePrisma {
+  const v = String(m ?? "").toUpperCase();
+  if (v === "COMFORT" || v === "RANDOM" || v === "ACADEMIC") return v as ModePrisma;
+  if (v === "comfort") return "COMFORT";
+  if (v === "random") return "RANDOM";
+  return "ACADEMIC";
+}
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return bad(res, "OPENAI_API_KEY is not set", 500);
+function normalizeOne(q: RawQuestion, i: number): StoredQuestion {
+  const idRaw = q?.id ?? q?.qid ?? i + 1;
+  const id = String(idRaw);
+  const question = (q?.question ?? q?.text ?? "").trim() || `Question ${i + 1}`;
+  const opts = q?.options ?? q?.answers;
+  const options = Array.isArray(opts) ? opts.filter((s) => typeof s === "string") : undefined;
+  const ai =
+    typeof q?.answerIndex === "number"
+      ? q.answerIndex
+      : typeof q?.correctIndex === "number"
+      ? q.correctIndex
+      : undefined;
+  const tags = Array.isArray(q?.tags) ? q.tags.filter((s) => typeof s === "string") : undefined;
 
-  let body: GenerateBody;
+  const base: StoredQuestion = { id, question };
+  if (options && options.length > 0) base.options = options;
+  if (typeof ai === "number") base.answerIndex = ai;
+  if (tags && tags.length > 0) base.tags = tags;
+  return base;
+}
+
+function makeFallbackQuestions(topic: string, count: number): StoredQuestion[] {
+  const c = Math.min(Math.max(count || 5, 1), 20);
+  const t = topic || "Общая тема";
+  const list: StoredQuestion[] = [];
+  for (let i = 0; i < c; i++) {
+    list.push({
+      id: String(i + 1),
+      question: `(${t}) Вопрос ${i + 1}: выбери верный вариант`,
+      options: ["Вариант A", "Вариант B", "Вариант C", "Вариант D"],
+      answerIndex: 0,
+      tags: ["ac"],
+    });
+  }
+  return list;
+}
+
+async function generateViaOpenAI(
+  openai: OpenAI,
+  params: {
+    topic: string;
+    difficulty: DiffLower;
+    count: number;
+    mode: ModeLower;
+    refinements: string[];
+  }
+): Promise<StoredQuestion[]> {
+  const { topic, difficulty, count, mode, refinements } = params;
+
+  const sys = `You are a test generator. Output ONLY a valid JSON array with questions. No prose, no markdown fences.`;
+  const user = {
+    instruction: "Generate multiple-choice questions.",
+    topic,
+    difficulty,
+    mode,
+    count,
+    refinements,
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "number"] },
+          question: { type: "string" },
+          options: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 8 },
+          answerIndex: { type: "number" },
+          tags: { type: "array", items: { type: "string" } },
+        },
+        required: ["question", "options", "answerIndex"],
+        additionalProperties: true,
+      },
+      minItems: 1,
+      maxItems: 50,
+    },
+  };
+
+  log("OPENAI model:", process.env.OPENAI_MODEL || "gpt-4o-mini");
+  log("Prompt topic:", topic, "difficulty:", difficulty, "count:", count, "mode:", mode);
+
+  const resp = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: JSON.stringify(user) },
+    ],
+    temperature: 0.2,
+  });
+
+  const content = resp.choices?.[0]?.message?.content?.trim() ?? "";
+  log("Raw content length:", content.length);
+  if (content) log("Raw content (head):", content.slice(0, 240));
+
+  let parsed: any;
   try {
-    body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-  } catch {
-    return bad(res, "Invalid JSON body");
+    const jsonText = content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "");
+    parsed = JSON.parse(jsonText);
+  } catch (e: any) {
+    log("JSON parse error:", e?.message);
+    return [];
   }
 
-  const subjectId = Number(body.subjectId);
-  const topic = (body.topic || "").trim();
-  const difficulty = (body.difficulty || "medium") as "easy" | "medium" | "hard";
-  const numQuestions = Math.min(Math.max(Number(body.numQuestions || 10), 1), 50);
-  const inputTags = Array.isArray(body.tags) ? body.tags.filter(Boolean) : [];
-  const model = body.model || "gpt-4o-mini";
+  if (!Array.isArray(parsed)) {
+    log("Parsed is not an array, type:", typeof parsed);
+    return [];
+  }
+  const norm = parsed.map((q: RawQuestion, i: number) => normalizeOne(q, i)).filter(Boolean);
+  log("Normalized count:", norm.length);
+  return norm;
+}
 
-  if (!subjectId || !Number.isFinite(subjectId)) return bad(res, "subjectId must be a number");
-  if (!topic) return bad(res, "topic is required");
-  if (!["easy", "medium", "hard"].includes(difficulty)) return bad(res, "difficulty must be easy|medium|hard");
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const auth = requireUser(req);
+  if (!auth) return bad(res, 401, "Требуется авторизация");
 
-  // Подготовим системный промпт, чтобы гарантировать строгий формат JSON
-  const system = `You are a test generator. Return ONLY valid JSON. 
-Each question must be multiple-choice with 4 options, include a correct "answerIndex" (0..3), and a non-empty "tags" array.
-Use the following JSON schema, no extra fields:
-
-{
-  "questions": [
-    {
-      "id": "string-uuid-or-stable-id",
-      "question": "string",
-      "options": ["string","string","string","string"],
-      "answerIndex": 0,
-      "tags": ["tag1","tag2"]
-    }
-  ]
-}`;
-
-  const user = `Generate ${numQuestions} questions for subjectId=${subjectId}, topic="${topic}", difficulty="${difficulty}".
-If tags were provided, bias the questions to cover them: [${inputTags.join(", ")}].
-Ensure tags on each question are granular (e.g., "probability", "bayes", "linear-regression", "regularization").`;
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return bad(res, 405, "Метод не поддерживается");
+  }
 
   try {
-    const openai = new OpenAI({ apiKey });
-    const completion = await openai.chat.completions.create({
-      model,
-      temperature: 0.4,
-      max_tokens: 1500,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    });
-
-    const raw = completion.choices?.[0]?.message?.content?.toString() || "";
-    let parsed: any;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      // Попробуем выдрать JSON из текста (редкий случай)
-      const start = raw.indexOf("{");
-      const end = raw.lastIndexOf("}");
-      if (start >= 0 && end > start) {
-        parsed = JSON.parse(raw.slice(start, end + 1));
-      } else {
-        return bad(res, "Model did not return valid JSON", 500);
-      }
-    }
-
-    const arr = Array.isArray(parsed?.questions) ? parsed.questions : [];
-    if (!arr.length) return bad(res, "No questions generated", 500);
-
-    // Нормализуем вопросы и добавим метаданные
-    const questions: TestQuestion[] = arr.slice(0, numQuestions).map((q: any, i: number) => {
-      const id = String(q?.id || `q_${i + 1}`);
-      const question = String(q?.question || "").trim();
-      const options = Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : [];
-      const answerIndex = Number(q?.answerIndex);
-      const tags = Array.isArray(q?.tags) ? q.tags.map((t: any) => String(t)) : [];
-
-      if (!question || options.length !== 4 || !Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex > 3) {
-        throw new Error(`Invalid question at index ${i}`);
-      }
-
-      const mergedTags = Array.from(new Set([...(inputTags || []), ...tags])).slice(0, 6);
-
-      return {
-        id,
-        question,
-        options,
-        answerIndex,
-        tags: mergedTags,
-        difficulty,
-        topic,
-        subjectId,
-      };
-    });
-
-    const payload: GeneratedTest = {
+    const {
+      subject,
       subjectId,
       topic,
       difficulty,
-      questions,
-    };
+      mode,
+      count,
+      goal,
+      refinements,
+      tagsVersion,
+    } = (req.body ?? {}) as Body;
 
-    return res.status(200).json(payload);
+    const openaiKey = process.env.OPENAI_API_KEY || "";
+    const openai = new OpenAI({ apiKey: openaiKey });
+
+    const difficultyLower = toDiffLower(difficulty ?? "medium");
+    const difficultyPrisma = toDiffPrisma(difficulty ?? "MEDIUM");
+    const modeLower = toModeLower(mode ?? "academic");
+    const modePrisma = toModePrisma(mode ?? "ACADEMIC");
+
+    const numQuestions = Math.min(Math.max(Number(count ?? 5), 1), 20);
+    const topicStr = (topic ?? subject ?? "").trim();
+    const refinementsArr = Array.isArray(refinements) ? refinements : [];
+    const tagsVer = (tagsVersion ?? "v1").trim() || "v1";
+
+    log("ENV OPENAI_API_KEY?", !!openaiKey, "numQuestions:", numQuestions);
+
+    let questions: StoredQuestion[] = [];
+
+    if (openaiKey) {
+      try {
+        questions = await generateViaOpenAI(openai, {
+          topic: topicStr || "Общая тема",
+          difficulty: difficultyLower,
+          count: numQuestions,
+          mode: modeLower,
+          refinements: refinementsArr,
+        });
+      } catch (e: any) {
+        log("OpenAI call failed:", e?.message);
+      }
+    } else {
+      log("No OPENAI_API_KEY present, skipping OpenAI call.");
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      log("Using fallback questions");
+      questions = makeFallbackQuestions(topicStr, numQuestions);
+    }
+
+    const plannedTagsPerQuestion: string[][] = questions.map((q) => q.tags ?? []);
+
+    const created = await prisma.generatedTest.create({
+      data: {
+        userId: auth.userId,
+        subjectId: subjectId ?? null,
+        topic: topicStr || (subjectId ? "subject-session" : "custom-topic"),
+        difficulty: difficultyPrisma,
+        mode: modePrisma,
+        savable: true,
+        tagsVersion: tagsVer,
+        refinements: refinementsArr,
+        numQuestions,
+        numOptions: questions[0]?.options?.length ?? 4,
+        prefSnapshot: null,
+        plannedTagsPerQuestion,
+        questions,
+        experimentArm: null,
+        tagStrategy: null,
+      },
+      select: { id: true },
+    });
+
+    console.log(
+      "[/api/generate-test] created session:",
+      created.id,
+      "questions:",
+      questions.length
+    );
+    return res.status(200).json({ ok: true, sessionId: String(created.id) });
   } catch (err: any) {
-    console.error("generate-test error:", err?.response?.data || err?.message || err);
-    return bad(res, "Failed to generate test", 500);
+    console.error("[/api/generate-test] error:", err);
+    return bad(res, 500, err?.message || "Internal error");
   }
 }

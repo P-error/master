@@ -107,7 +107,7 @@ export default function StatisticsPage() {
   return (
     <>
       <Head>
-        <title>Statistics — EduAI</title>
+        <title>Статистика — EduAI</title>
       </Head>
 
       <section className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
@@ -119,18 +119,17 @@ export default function StatisticsPage() {
         >
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
             <TrendingUp className="h-6 w-6 text-primary" />
-            Statistics
+            Статистика
           </h1>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            Попытки, точность и разбивка по тегам/темам. Мобильная вёрстка,
-            плавные микровзаимодействия. Контракты бэка не трогаем.
+            Попытки, точность и разбивка по тегам/темам.
           </p>
         </motion.div>
 
         {loading && (
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading…
+            Загрузка…
           </div>
         )}
 
@@ -139,7 +138,7 @@ export default function StatisticsPage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
               <div>
-                <div className="text-sm font-semibold">Sign in required</div>
+                <div className="text-sm font-semibold">Требуется вход</div>
                 <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
                   Войдите, чтобы посмотреть статистику.
                 </p>
@@ -148,13 +147,13 @@ export default function StatisticsPage() {
                     href="/login"
                     className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg"
                   >
-                    Log in
+                    Войти
                   </Link>
                   <Link
                     href="/register"
                     className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200"
                   >
-                    Create account
+                    Создать аккаунт
                   </Link>
                 </div>
               </div>
@@ -177,7 +176,7 @@ export default function StatisticsPage() {
 
         {!loading && !unauthorized && !error && hasData && stats && (
           <div className="grid gap-3 lg:grid-cols-3">
-            {/* Attempts over time */}
+            {/* Динамика попыток */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0, transition: trans(0.03, 0.35) }}
@@ -185,7 +184,7 @@ export default function StatisticsPage() {
             >
               <div className="mb-2 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-primary" />
-                <div className="text-sm font-semibold">Attempts over time</div>
+                <div className="text-sm font-semibold">Динамика попыток</div>
               </div>
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -193,7 +192,7 @@ export default function StatisticsPage() {
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                     <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v: any) => [v, "Attempts"]} />
+                    <Tooltip formatter={(v: any) => [v, "Попытки"]} />
                     <Line
                       type="monotone"
                       dataKey="attempts"
@@ -207,7 +206,7 @@ export default function StatisticsPage() {
               </div>
             </motion.div>
 
-            {/* Accuracy donut */}
+            {/* Точность (донат) */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0, transition: trans(0.05, 0.35) }}
@@ -215,7 +214,7 @@ export default function StatisticsPage() {
             >
               <div className="mb-2 flex items-center gap-2">
                 <PieIcon className="h-4 w-4 text-primary" />
-                <div className="text-sm font-semibold">Accuracy</div>
+                <div className="text-sm font-semibold">Точность</div>
               </div>
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -231,7 +230,7 @@ export default function StatisticsPage() {
                         <Cell
                           key={idx}
                           fill={
-                            entry.name === "Correct"
+                            entry.name === "Верно"
                               ? "hsl(142 72% 45%)" /* emerald-500 */
                               : "hsl(0 84% 60%)" /* red-500 */
                           }
@@ -243,7 +242,7 @@ export default function StatisticsPage() {
                 </ResponsiveContainer>
               </div>
               <div className="mt-2 text-center text-sm">
-                Correct: <b>{stats.accuracy.correct}</b> / {stats.accuracy.total} (
+                Верно: <b>{stats.accuracy.correct}</b> / {stats.accuracy.total} (
                 {stats.accuracy.total
                   ? Math.round((stats.accuracy.correct / stats.accuracy.total) * 100)
                   : 0}
@@ -251,7 +250,7 @@ export default function StatisticsPage() {
               </div>
             </motion.div>
 
-            {/* By tag */}
+            {/* По тегам */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0, transition: trans(0.07, 0.35) }}
@@ -259,7 +258,7 @@ export default function StatisticsPage() {
             >
               <div className="mb-2 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-primary" />
-                <div className="text-sm font-semibold">Performance by tag</div>
+                <div className="text-sm font-semibold">Результаты по тегам</div>
               </div>
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -267,7 +266,7 @@ export default function StatisticsPage() {
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                     <XAxis dataKey="tag" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v: any) => [`${v}%`, "Accuracy"]} />
+                    <Tooltip formatter={(v: any) => [`${v}%`, "Точность"]} />
                     <Bar dataKey="accuracy" className="text-indigo-500" fill="currentColor" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -349,11 +348,11 @@ function toTagArrayFromObject(obj: any): TagBar[] {
 function toAccuracyPie(a: { correct: number; total: number }): AccuracySlice[] {
   const wrong = Math.max(0, a.total - a.correct);
   const pie: AccuracySlice[] = [
-    { name: "Correct", value: a.correct },
-    { name: "Wrong", value: wrong },
+    { name: "Верно", value: a.correct },
+    { name: "Неверно", value: wrong },
   ];
   // если total=0 — показываем пустую диаграмму
-  if (a.total === 0) return [{ name: "No data", value: 1 }];
+  if (a.total === 0) return [{ name: "Нет данных", value: 1 }];
   return pie;
 }
 function pct(correct: number, total: number): number {

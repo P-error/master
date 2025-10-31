@@ -33,7 +33,7 @@ export default function QuestionCard({
       className="overflow-hidden rounded-2xl border border-white/10 bg-white/60 p-4 shadow-soft dark:bg-white/5"
     >
       <div className="mb-2 text-sm font-semibold">
-        Q{index + 1}. {question.text}
+        Вопрос {index + 1}. {question.text}
       </div>
 
       {question.type === "single" && Array.isArray(question.options) ? (

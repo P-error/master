@@ -86,24 +86,25 @@ export default function ProfilePage() {
   return (
     <>
       <Head>
-        <title>Profile — EduAI</title>
+        <title>Профиль — EduAI</title>
       </Head>
 
       <section className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
         <motion.div variants={fadeVariants(0)} initial="hidden" animate="show" className="mb-4">
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
             <User className="h-6 w-6 text-primary" />
-            Profile
+            Профиль
           </h1>
           <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-            Ваши данные и краткая сводка. Настроить можно в <Link href="/settings" className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">Settings</Link>.
+            Ваши данные и краткая сводка. Настроить можно в{" "}
+            <Link href="/settings" className="text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">Настройках</Link>.
           </p>
         </motion.div>
 
         {loading && (
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/60 px-3 py-3 text-sm dark:bg-white/5">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading…
+            Загрузка…
           </div>
         )}
 
@@ -112,13 +113,13 @@ export default function ProfilePage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
               <div>
-                <div className="text-sm font-semibold">Sign in required</div>
+                <div className="text-sm font-semibold">Требуется вход</div>
                 <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
                   Войдите, чтобы просматривать профиль.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Link href="/login" className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg">Log in</Link>
-                  <Link href="/register" className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200">Create account</Link>
+                  <Link href="/login" className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primaryFg">Войти</Link>
+                  <Link href="/register" className="rounded-xl bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 shadow-sm dark:bg-white/10 dark:text-gray-200">Создать аккаунт</Link>
                 </div>
               </div>
             </div>
@@ -138,12 +139,12 @@ export default function ProfilePage() {
               animate={{ opacity: 1, y: 0, transition: trans(0.03, 0.35) }}
               className="rounded-2xl border border-white/10 bg-white/60 p-4 text-sm shadow-soft dark:bg-white/5"
             >
-              <div className="mb-2 text-base font-semibold">Account</div>
+              <div className="mb-2 text-base font-semibold">Аккаунт</div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <Field label="Login" value={me.login} />
-                <Field label="User ID" value={String(me.id)} />
-                <Field label="Created" value={me.createdAt ? new Date(me.createdAt).toLocaleString() : "—"} />
-                <Field label="Updated" value={me.updatedAt ? new Date(me.updatedAt).toLocaleString() : "—"} />
+                <Field label="Логин" value={me.login} />
+                <Field label="ID пользователя" value={String(me.id)} />
+                <Field label="Создан" value={me.createdAt ? new Date(me.createdAt).toLocaleString("ru-RU") : "—"} />
+                <Field label="Обновлён" value={me.updatedAt ? new Date(me.updatedAt).toLocaleString("ru-RU") : "—"} />
               </div>
             </motion.div>
 
@@ -152,17 +153,17 @@ export default function ProfilePage() {
               animate={{ opacity: 1, y: 0, transition: trans(0.05, 0.35) }}
               className="rounded-2xl border border-white/10 bg-white/60 p-4 text-sm shadow-soft dark:bg-white/5"
             >
-              <div className="mb-2 text-base font-semibold">Learning profile</div>
+              <div className="mb-2 text-base font-semibold">Профиль обучения</div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <Field label="Age" value={me.age ?? "—"} />
-                <Field label="Education level" value={me.educationLevel ?? "—"} />
-                <Field label="Goal" value={me.learningGoal ?? "—"} />
-                <Field label="Style" value={me.learningStyle ?? "—"} />
-                <Field label="Format" value={me.preferredFormat ?? "—"} />
-                <Field label="Tone" value={me.preferredTone ?? "—"} />
-                <Field label="Detail level" value={me.detailLevel ?? "—"} />
-                <Field label="Prior knowledge" value={me.priorKnowledge ?? "—"} />
-                <Field label="Language level" value={me.languageLevel ?? "—"} />
+                <Field label="Возраст" value={me.age ?? "—"} />
+                <Field label="Уровень образования" value={me.educationLevel ?? "—"} />
+                <Field label="Цель" value={me.learningGoal ?? "—"} />
+                <Field label="Стиль" value={me.learningStyle ?? "—"} />
+                <Field label="Формат" value={me.preferredFormat ?? "—"} />
+                <Field label="Тон" value={me.preferredTone ?? "—"} />
+                <Field label="Уровень детализации" value={me.detailLevel ?? "—"} />
+                <Field label="Предварительные знания" value={me.priorKnowledge ?? "—"} />
+                <Field label="Уровень языка" value={me.languageLevel ?? "—"} />
               </div>
             </motion.div>
 
@@ -171,11 +172,11 @@ export default function ProfilePage() {
               animate={{ opacity: 1, y: 0, transition: trans(0.07, 0.35) }}
               className="rounded-2xl border border-white/10 bg-white/60 p-4 text-sm shadow-soft dark:bg-white/5"
             >
-              <div className="mb-2 text-base font-semibold">Display</div>
+              <div className="mb-2 text-base font-semibold">Отображение</div>
               <div className="grid gap-2 sm:grid-cols-3">
-                <Field label="Dark mode" value={me.darkMode ? "On" : "Off"} />
-                <Field label="Accessible mode" value={me.accessibleMode ? "On" : "Off"} />
-                <Field label="Font size" value={me.fontSize ?? "base"} />
+                <Field label="Тёмная тема" value={me.darkMode ? "Вкл" : "Выкл"} />
+                <Field label="Доступный режим" value={me.accessibleMode ? "Вкл" : "Выкл"} />
+                <Field label="Размер шрифта" value={me.fontSize ?? "base"} />
               </div>
 
               <div className="mt-3">
@@ -184,7 +185,7 @@ export default function ProfilePage() {
                   className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/70 px-3 py-2 text-sm font-medium text-gray-900 transition hover:shadow-ring dark:bg-white/10 dark:text-gray-200"
                 >
                   <Settings className="h-4 w-4" />
-                  Open Settings
+                  Открыть настройки
                 </Link>
               </div>
             </motion.div>

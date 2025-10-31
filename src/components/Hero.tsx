@@ -15,11 +15,11 @@ export default function Hero() {
           className="order-2 md:order-1"
         >
           <h1 className="text-2xl font-extrabold leading-tight sm:text-3xl">
-            Adaptive learning. <span className="text-primary">Smarter</span> tests.
+            Адаптивное обучение. <span className="text-primary">Умные тесты.</span> 
           </h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-            Generate personalized quizzes, chat with a tutor, and track your progress —
-            all in one place. Designed for mobile, built for speed.
+            Генерируйте персонализированные викторины, общайтесь с EduAI и отслеживайте свой прогресс —
+            всё в одном месте. Разработано для мобильных устройств, оптимизировано для скорости.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -27,19 +27,16 @@ export default function Hero() {
               href="/test"
               className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primaryFg transition hover:opacity-90"
             >
-              Start a test
+              Начать тест
             </Link>
             <Link
               href="/subjects"
               className="inline-flex items-center justify-center rounded-xl bg-white/70 px-4 py-2 text-sm font-medium text-gray-900 shadow-soft transition hover:shadow-ring dark:bg-white/5 dark:text-gray-200"
             >
-              Explore subjects
+              Изучить предметы
             </Link>
           </div>
 
-          <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            No API contracts were harmed: routes remain the same.
-          </div>
         </motion.div>
 
         {/* иллюстративный блок с мягкими «плавающими» карточками */}
@@ -50,12 +47,12 @@ export default function Hero() {
               animate={{ y: 0, opacity: 1, transition: trans(0.05, 0.45) }}
               className="absolute right-5 top-1/2 w-40 -translate-y-1/2 rounded-2xl bg-white/70 p-3 text-xs shadow-soft dark:bg-white/5"
             >
-              <div className="font-semibold">Next attempt</div>
+              <div className="font-semibold">Следующая попытка</div>
               <div className="mt-1 text-gray-600 dark:text-gray-300">
-                Math · difficulty: Medium
+                Математика · сложность: Средняя
               </div>
               <div className="mt-2 inline-flex rounded-lg bg-primary/10 px-2 py-1 text-primary">
-                predicted: 78 → goal: 85
+                прогноз: 78 → цель: 85
               </div>
             </motion.div>
 
@@ -64,9 +61,9 @@ export default function Hero() {
               animate={{ y: 0, opacity: 1, transition: trans(0.1, 0.5) }}
               className="absolute left-0 top-6 w-52 rounded-2xl bg-white/70 p-3 text-xs shadow-soft dark:bg-white/5"
             >
-              <div className="font-semibold">Tutor hint</div>
+              <div className="font-semibold">Подсказка EduAI</div>
               <div className="mt-1 text-gray-600 dark:text-gray-300">
-                Try factoring before substitution.
+                Попробуйте разложить на множители перед подстановкой.
               </div>
             </motion.div>
 
@@ -75,9 +72,9 @@ export default function Hero() {
               animate={{ scale: 1, opacity: 1, transition: trans(0.15, 0.45) }}
               className="absolute bottom-2 left-10 w-56 rounded-2xl bg-white/70 p-3 text-xs shadow-soft dark:bg-white/5"
             >
-              <div className="font-semibold">Progress</div>
+              <div className="font-semibold">Прогресс</div>
               <div className="mt-1 text-gray-600 dark:text-gray-300">
-                7/10 correct · 3m avg time
+                7/10 верно · 3 мин среднее время
               </div>
             </motion.div>
           </div>
