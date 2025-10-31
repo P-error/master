@@ -21,16 +21,13 @@ type Props = {
 };
 
 export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
-  type FormDefaults = Partial<GenPayload>;
-
-  const dv: FormDefaults = {
-  subjectId: defaultValues?.subjectId,
-  topic: defaultValues?.topic ?? "",
-  difficulty: defaultValues?.difficulty ?? "MEDIUM",
-  count: defaultValues?.count ?? 10,
-  mode: defaultValues?.mode ?? "RANDOM",
-  savable: defaultValues?.savable ?? true,
-};
+  const dv: Partial<GenPayload> = {
+    subjectId: defaultValues?.subjectId ?? undefined,
+    topic: defaultValues?.topic ?? "",
+    difficulty: (defaultValues?.difficulty ?? "MEDIUM") as Difficulty,
+    count: defaultValues?.count ?? 10,
+    goal: defaultValues?.goal ?? 80,
+  };
 
   const [topic, setTopic] = useState<string>(dv.topic);
   const [subjectId, setSubjectId] = useState<number | undefined>(dv.subjectId);
