@@ -21,14 +21,16 @@ type Props = {
 };
 
 export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
+  // ↓↓↓ ПРАВКА: допускаем необязательные поля в дефолтах
   const dv: Partial<GenPayload> = {
-    subjectId: defaultValues?.subjectId ?? undefined,
+    subjectId: defaultValues?.subjectId,
     topic: defaultValues?.topic ?? "",
     difficulty: (defaultValues?.difficulty ?? "MEDIUM") as Difficulty,
     count: defaultValues?.count ?? 10,
     goal: defaultValues?.goal ?? 80,
   };
 
+  // ↓↓↓ ПРАВКА: безопасные дефолты для useState
   const [topic, setTopic] = useState<string>(dv.topic ?? "");
   const [subjectId, setSubjectId] = useState<number | undefined>(dv.subjectId);
   const [subjectQuery, setSubjectQuery] = useState<string>(""); // всегда строка для SubjectAutocomplete
@@ -37,19 +39,20 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
   const [goal, setGoal] = useState<number>(dv.goal ?? 80);
 
   useEffect(() => {
-    const next: Required<GenPayload> = {
-      subjectId: defaultValues?.subjectId ?? undefined,
+    // ↓↓↓ ПРАВКА: Partial и без `?? undefined`
+    const next: Partial<GenPayload> = {
+      subjectId: defaultValues?.subjectId,
       topic: defaultValues?.topic ?? "",
       difficulty: (defaultValues?.difficulty ?? "MEDIUM") as Difficulty,
       count: defaultValues?.count ?? 10,
       goal: defaultValues?.goal ?? 80,
     };
-    setTopic(next.topic);
+    setTopic(next.topic ?? "");
     setSubjectId(next.subjectId);
     setSubjectQuery("");
-    setDifficulty(next.difficulty);
-    setCount(next.count);
-    setGoal(next.goal);
+    setDifficulty((next.difficulty ?? "MEDIUM") as Difficulty);
+    setCount(next.count ?? 10);
+    setGoal(next.goal ?? 80);
   }, [
     defaultValues?.subjectId,
     defaultValues?.topic,
