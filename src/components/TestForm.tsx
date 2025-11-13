@@ -81,7 +81,7 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
 
   return (
     <motion.form
-      variants={fadeVariants()}  {/* <-- вызов функции */}
+      variants={fadeVariants()} 
       initial="hidden"
       animate="visible"
       className="space-y-4"
@@ -187,3 +187,4 @@ export default function TestForm({ disabled, defaultValues, onSubmit }: Props) {
     </motion.form>
   );
 }
+  

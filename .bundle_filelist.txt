@@ -51,13 +51,17 @@
 ./src/generate-test.fixed.ts
 ./src/lib/auth.ts
 ./src/lib/motion.ts
+./src/lib/personalization.ts
 ./src/lib/prisma.ts
 ./src/lib/submit.ts
 ./src/lib/toast.tsx
 ./src/main.tsx
+./src/pages/api/chat/history.ts
+./src/pages/api/chat/messages.ts
 ./src/pages/api/chat.ts
 ./src/pages/api/generate-test.ts
 ./src/pages/api/login.ts
+./src/pages/api/messages.ts
 ./src/pages/api/me.ts
 ./src/pages/api/profile.ts
 ./src/pages/api/recommendations.ts

@@ -94,8 +94,8 @@ model Subject {
   updatedAt DateTime @updatedAt
 
   // Связи
-  generatedTests GeneratedTest[]
-  testAttempts   TestAttempt[]
+  generatedTests      GeneratedTest[]
+  testAttempts        TestAttempt[]
   // нормализованные вопросы по тестам этого предмета
   normalizedQuestions TestQuestion[]
 
@@ -120,8 +120,9 @@ model GeneratedTest {
   mode         Mode
   savable      Boolean    @default(false) // можно ли сохранять попытки в историю/статистику
   tagsVersion  String     @default("v1") // версия легенды тегов
-  refinements  String[]   // уточнения (до 10)
+  refinements  String[] // уточнения (до 10)
   numQuestions Int
+  targetScore  Int
   numOptions   Int        @default(4) // если хочешь иметь запасной дефолт
 
   // Снимок предпочтений на момент генерации (для корректного анализа)
@@ -155,18 +156,18 @@ model TestQuestion {
   generatedTestId Int
   generatedTest   GeneratedTest @relation(fields: [generatedTestId], references: [id], onDelete: Cascade)
 
-  subjectId  Int
-  subject    Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subjectId Int
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
-  qIndex      Int          // позиция в тесте 0..N-1
-  prompt      String       // текст вопроса
-  options     String[]     // варианты ответов
-  answerIndex Int          // индекс правильного ответа
-  tags        String[]     // массив нормализованных тегов
+  qIndex      Int // позиция в тесте 0..N-1
+  prompt      String // текст вопроса
+  options     String[] // варианты ответов
+  answerIndex Int // индекс правильного ответа
+  tags        String[] // массив нормализованных тегов
 
   @@unique([generatedTestId, qIndex]) // на один тест позиция вопроса уникальна
   @@index([subjectId])
-  @@index([tags], type: Gin)          // GIN-индекс массива тегов (Postgres)
+  @@index([tags], type: Gin) // GIN-индекс массива тегов (Postgres)
 }
 
 // ---- Попытка прохождения (ФАКТ ОТВЕТОВ) ----
@@ -224,8 +225,8 @@ model TrainingExample {
   difficulty Difficulty
 
   questionId   String // id вопроса в JSON генерации
-  qIndex       Int    // позиция в тесте
-  text         String @db.Text
+  qIndex       Int // позиция в тесте
+  text         String   @db.Text
   options      Json
   correctIndex Int
   tags         String[] // нормализованные коды тегов
