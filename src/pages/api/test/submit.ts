@@ -171,7 +171,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Загружаем тест + вопросы из JSON (без TestQuestion)
     const loaded = await loadQuestionsFromJson(generatedTestId);
-    if ("error" in loaded) return bad(res, 400, loaded.error);
+    if ("error" in loaded) return bad(res, 400, loaded.error || "Unknown error");
 
     const test = loaded.test as any;
     if (test.userId !== uid) return bad(res, 403, "Forbidden: test does not belong to user");
@@ -326,7 +326,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           where: {
             userId_subjectId_tag: {
               userId: uid,
-              subjectId: subjIdForStat,
+              subjectId: subjIdForStat as number,
               tag,
             },
           },
@@ -340,7 +340,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await prisma.userTagStat.create({
             data: {
               userId: uid,
-              subjectId: subjIdForStat,
+              subjectId: subjIdForStat as number,
               tag,
               total: baseTotal,
               correct: baseCorrect,
@@ -356,7 +356,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             where: {
               userId_subjectId_tag: {
                 userId: uid,
-                subjectId: subjIdForStat,
+                subjectId: subjIdForStat as number,
                 tag,
               },
             },

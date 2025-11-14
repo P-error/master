@@ -216,7 +216,7 @@ export default function TestSessionPage() {
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         <motion.section
-          variants={fadeVariants}
+          variants={fadeVariants()}
           initial="hidden"
           animate="visible"
           transition={trans(0)}
