@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { Difficulty } from "@prisma/client";
 
 type ResultIn = {
   total: number;
@@ -49,12 +50,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     if (!subject) return res.status(404).json({ error: "Subject not found" });
 
+    const difficultyEnum = (difficulty ?? "MEDIUM") as Difficulty;
+
     const created = await prisma.testAttempt.create({
       data: {
         userId: auth.userId,
         subjectId,
         topic,
-        difficulty,
+        difficulty: difficultyEnum,
         total: result.total,
         correct: result.correct,
         accuracy: result.total > 0 ? result.correct / result.total : 0,
