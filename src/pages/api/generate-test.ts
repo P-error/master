@@ -298,7 +298,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         numQuestions,
         targetScore: targetScore ?? 80,
         numOptions: questions[0]?.options?.length ?? 4,
-        prefSnapshot: null,
         plannedTagsPerQuestion,
         questions,
         experimentArm: null,
