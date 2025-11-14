@@ -15,7 +15,9 @@
         "prisma:seed": "dotenv -e .env.local -- node prisma/seed.js",
         "postinstall": "prisma generate",
         "pack": "node scripts/pack.mjs",
-        "pack:clean": "node scripts/pack.mjs --clean"
+        "pack:clean": "node scripts/pack.mjs --clean",
+        "simulate:users": "node scripts/simulate-users.mjs"
+
     },
     "dependencies": {
         "@prisma/client": "^6.17.0",

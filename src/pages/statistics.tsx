@@ -18,14 +18,16 @@ import {
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
-  PieChart,
+  CartesianGrid,
   Pie,
+  PieChart,
   Cell,
   BarChart,
   Bar,
 } from "recharts";
+
+const COLORS = ["#38bdf8", "#a855f7", "#f97316", "#22c55e", "#e11d48"];
 
 type SubjectStat = {
   subjectId: number | null;
@@ -73,13 +75,6 @@ type RecResponse = {
   recommendations: RecItem[];
 };
 
-const COLORS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#8b5cf6", "#14b8a6"];
-
-function pct(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * 100);
-}
-
 function normalizeStats(raw: RawStats): NormalizedStats {
   return {
     ...raw,
@@ -102,6 +97,9 @@ export default function StatisticsPage() {
   const [recs, setRecs] = useState<RecResponse | null>(null);
   const [recsLoading, setRecsLoading] = useState(false);
   const [recsError, setRecsError] = useState<string | null>(null);
+
+  const [timelineRange, setTimelineRange] = useState<"all" | "last10" | "last30">("all");
+  const [subjectFilter, setSubjectFilter] = useState<string>("all");
 
   // Загружаем статистику
   useEffect(() => {
@@ -133,24 +131,23 @@ export default function StatisticsPage() {
         if (!alive) return;
         setError(e?.message || "Ошибка загрузки статистики.");
       } finally {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setLoading(false);
       }
     })();
 
     return () => {
-      alive = false;
+      alive = true;
     };
   }, []);
 
-  // Ленивая загрузка рекомендаций, когда включают соответствующий режим
+  // Загружаем рекомендации, когда переходим на вкладку "Рекомендации"
   useEffect(() => {
     if (view !== "recs") return;
     if (unauthorized) return;
 
-    // уже есть данные или идёт запрос — ничего не делаем
-    if (recs || recsLoading) return;
-
     let cancelled = false;
+
     setRecsLoading(true);
     setRecsError(null);
 
@@ -169,16 +166,13 @@ export default function StatisticsPage() {
           return;
         }
 
-        const data = await res.json().catch(() => null);
-
-        // Если сервер вернул { error: ... } или что-то непонятное
-        if (!res.ok || !data || typeof data !== "object") {
-          const msg =
-            (data as any)?.error ||
-            "Не удалось загрузить рекомендации.";
-          setRecsError(msg);
-          return;
+        if (!res.ok) {
+          throw new Error("Не удалось загрузить рекомендации.");
         }
+
+        const data = await res.json();
+
+        if (cancelled) return;
 
         // Проверяем, что это именно наш формат { summary, recommendations }
         if ("summary" in data && "recommendations" in data) {
@@ -208,6 +202,46 @@ export default function StatisticsPage() {
     if (!raw) return null;
     return normalizeStats(raw);
   }, [raw]);
+
+  const subjectOptions = useMemo(() => {
+    if (!stats) return [];
+    const seen = new Set<string>();
+    const result: { key: string; label: string }[] = [];
+    for (const s of stats.subjectStats) {
+      const key = s.subjectId === null ? "none" : String(s.subjectId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ key, label: s.subjectName });
+    }
+    return result;
+  }, [stats]);
+
+  const filteredTimeline = useMemo(() => {
+    if (!stats) return [];
+    let data = stats.timeline;
+    if (subjectFilter !== "all") {
+      data = data.filter((p) => {
+        const key = p.subjectId === null ? "none" : String(p.subjectId);
+        return key === subjectFilter;
+      });
+    }
+    if (timelineRange === "last10") {
+      return data.slice(-10);
+    }
+    if (timelineRange === "last30") {
+      return data.slice(-30);
+    }
+    return data;
+  }, [stats, subjectFilter, timelineRange]);
+
+  const filteredSubjectStats = useMemo(() => {
+    if (!stats) return [];
+    if (subjectFilter === "all") return stats.subjectStats;
+    return stats.subjectStats.filter((s) => {
+      const key = s.subjectId === null ? "none" : String(s.subjectId);
+      return key === subjectFilter;
+    });
+  }, [stats, subjectFilter]);
 
   const hasData =
     !!stats &&
@@ -241,6 +275,21 @@ export default function StatisticsPage() {
           .slice(0, 5)
       : [];
 
+  const negativeRecs = useMemo(
+    () => (recs ? recs.recommendations.filter((r) => r.type === "negative") : []),
+    [recs],
+  );
+
+  const neutralRecs = useMemo(
+    () => (recs ? recs.recommendations.filter((r) => r.type === "neutral") : []),
+    [recs],
+  );
+
+  const positiveRecs = useMemo(
+    () => (recs ? recs.recommendations.filter((r) => r.type === "positive") : []),
+    [recs],
+  );
+
   return (
     <>
       <Head>
@@ -260,57 +309,58 @@ export default function StatisticsPage() {
                 Прогресс и рекомендации
               </h1>
               <p className="mt-1 text-sm text-slate-400">
-                Переключайтесь между общей статистикой и персональными советами на основе ваших тестов.
+                Здесь ты видишь, как идёт обучение: общая точность, сильные и слабые стороны, а также текстовые
+                подсказки.
               </p>
             </div>
-            <div className="flex items-center justify-start md:justify-end">
-              <div className="inline-flex rounded-2xl bg-slate-900/70 p-1 text-xs font-medium text-slate-200 ring-1 ring-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setView("stats")}
-                  className={
-                    "rounded-xl px-3 py-1.5 transition " +
-                    (view === "stats"
-                      ? "bg-slate-100 text-slate-900 shadow-sm"
-                      : "text-slate-400 hover:text-slate-100")
-                  }
-                >
-                  Статистика
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView("recs")}
-                  className={
-                    "rounded-xl px-3 py-1.5 transition " +
-                    (view === "recs"
-                      ? "bg-slate-100 text-slate-900 shadow-sm"
-                      : "text-slate-400 hover:text-slate-100")
-                  }
-                >
-                  Рекомендации
-                </button>
-              </div>
+
+            {/* Tabs */}
+            <div className="inline-flex items-center rounded-full bg-slate-900/80 p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setView("stats")}
+                className={`rounded-full px-3 py-1 font-medium transition ${
+                  view === "stats"
+                    ? "bg-slate-200 text-slate-900 shadow-sm"
+                    : "text-slate-400 hover:text-slate-100"
+                }`}
+              >
+                Статистика
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("recs")}
+                className={`rounded-full px-3 py-1 font-medium transition ${
+                  view === "recs"
+                    ? "bg-slate-200 text-slate-900 shadow-sm"
+                    : "text-slate-400 hover:text-slate-100"
+                }`}
+              >
+                Рекомендации
+              </button>
             </div>
           </motion.header>
 
-          {/* Общие состояния авторизации / ошибок */}
-          {!loading && unauthorized && (
+          {/* Авторизация */}
+          {unauthorized && (
             <motion.div
               variants={fadeVariants(0.05)}
               initial="hidden"
               animate="show"
-              className="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              className="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-4 text-sm text-slate-200"
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4" />
-              <div>
-                <div className="font-medium">Требуется вход</div>
-                <p className="text-xs text-amber-100/80">
-                  Статистика и рекомендации доступны только авторизованным пользователям.
-                </p>
+              <div className="mb-1 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <span className="font-medium">Требуется вход</span>
               </div>
+              <p className="text-xs text-slate-400">
+                Статистика и рекомендации доступны только авторизованным пользователям. Войдите в аккаунт, чтобы
+                увидеть анализ своих попыток.
+              </p>
             </motion.div>
           )}
 
+          {/* Ошибка статистики */}
           {!loading && !unauthorized && error && view === "stats" && (
             <motion.div
               variants={fadeVariants(0.05)}
@@ -330,18 +380,22 @@ export default function StatisticsPage() {
           {view === "stats" && !unauthorized && (
             <>
               {loading && (
-                <motion.div
+                <motion.section
                   variants={fadeVariants(0.05)}
                   initial="hidden"
                   animate="show"
-                  className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-300"
+                  className="grid gap-4 md:grid-cols-4"
                 >
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Загружаем статистику…</span>
-                </motion.div>
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="h-24 rounded-2xl border border-slate-800 bg-slate-900/80 animate-pulse"
+                    />
+                  ))}
+                </motion.section>
               )}
 
-              {!loading && !error && stats && !hasData && (
+              {!loading && !error && !stats && (
                 <motion.div
                   variants={fadeVariants(0.05)}
                   initial="hidden"
@@ -378,8 +432,14 @@ export default function StatisticsPage() {
                     <SummaryCard
                       icon={TrendingUp}
                       label="Общая точность"
-                      value={`${pct(stats.overallAccuracy)}%`}
-                      helper="На основе всех ответов"
+                      value={`${Math.round((stats.overallAccuracy ?? 0) * 100)}%`}
+                      helper={
+                        bestSubjects.length > 0
+                          ? `Лучший предмет: ${bestSubjects[0].subjectName} (${Math.round(
+                              bestSubjects[0].accuracy * 100,
+                            )}%)`
+                          : "На основе всех ответов"
+                      }
                     />
                     <SummaryCard
                       icon={AlertTriangle}
@@ -392,7 +452,11 @@ export default function StatisticsPage() {
                               .join(", ")
                           : "нет явных слабых мест"
                       }
-                      helper="Определяется по накопленной статистике тегов"
+                      helper={
+                        weakTags.length > 0
+                          ? "Анализ по тегам с достаточным количеством вопросов"
+                          : "Продолжай решать задания — система найдёт слабые места"
+                      }
                     />
                   </div>
 
@@ -400,25 +464,76 @@ export default function StatisticsPage() {
                   <div className="grid gap-4 lg:grid-cols-3">
                     {/* Timeline */}
                     <div className="col-span-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                      <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                           <BarChart3 className="h-4 w-4 text-indigo-400" />
                           <h2 className="text-sm font-semibold text-slate-100">
                             Динамика точности по попыткам
                           </h2>
                         </div>
-                        <span className="text-xs text-slate-400">
-                          Точки — отдельные попытки (по всем предметам)
-                        </span>
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <span className="text-[11px] text-slate-400">
+                            Точки — отдельные попытки; можно фильтровать по предмету и диапазону
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={subjectFilter}
+                              onChange={(e) => setSubjectFilter(e.target.value)}
+                              className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-100"
+                            >
+                              <option value="all">Все предметы</option>
+                              {subjectOptions.map((opt) => (
+                                <option key={opt.key} value={opt.key}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="flex gap-1 rounded-full bg-slate-900/80 p-1 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => setTimelineRange("all")}
+                                className={`rounded-full px-2 py-0.5 ${
+                                  timelineRange === "all"
+                                    ? "bg-slate-700 text-slate-100"
+                                    : "text-slate-400 hover:text-slate-100"
+                                }`}
+                              >
+                                Всё время
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTimelineRange("last10")}
+                                className={`rounded-full px-2 py-0.5 ${
+                                  timelineRange === "last10"
+                                    ? "bg-slate-700 text-slate-100"
+                                    : "text-slate-400 hover:text-slate-100"
+                                }`}
+                              >
+                                10 попыток
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTimelineRange("last30")}
+                                className={`rounded-full px-2 py-0.5 ${
+                                  timelineRange === "last30"
+                                    ? "bg-slate-700 text-slate-100"
+                                    : "text-slate-400 hover:text-slate-100"
+                                }`}
+                              >
+                                30 попыток
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div className="h-64">
-                        {stats.timeline.length === 0 ? (
+                        {filteredTimeline.length === 0 ? (
                           <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                            Недостаточно данных для построения графика
+                            Недостаточно данных для выбранного фильтра
                           </div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={stats.timeline}>
+                            <LineChart data={filteredTimeline}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                               <XAxis
                                 dataKey="createdAt"
@@ -503,8 +618,17 @@ export default function StatisticsPage() {
                             <Tooltip
                               formatter={(value: any, name: any) =>
                                 name === "Верно" || name === "Неверно"
-                                  ? [`${value}`, name]
-                                  : [value, name]
+                                  ? `${value} (${pct(
+                                      name === "Верно"
+                                        ? stats?.totalQuestions
+                                          ? stats.totalCorrect / stats.totalQuestions
+                                          : 0
+                                        : stats?.totalQuestions
+                                        ? (stats.totalQuestions - stats.totalCorrect) /
+                                          stats.totalQuestions
+                                        : 0,
+                                    )}%)`
+                                  : value
                               }
                             />
                           </PieChart>
@@ -529,13 +653,13 @@ export default function StatisticsPage() {
                         </span>
                       </div>
                       <div className="h-64">
-                        {stats.subjectStats.length === 0 ? (
+                        {filteredSubjectStats.length === 0 ? (
                           <div className="flex h-full items-center justify-center text-xs text-slate-500">
                             Пока нет попыток с привязкой к предметам
                           </div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.subjectStats}>
+                            <BarChart data={filteredSubjectStats}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                               <XAxis
                                 dataKey="subjectName"
@@ -553,7 +677,7 @@ export default function StatisticsPage() {
                                 labelFormatter={(label: any) => label}
                               />
                               <Bar dataKey="accuracy">
-                                {stats.subjectStats.map((_, idx) => (
+                                {filteredSubjectStats.map((_, idx) => (
                                   <Cell
                                     key={`subject-${idx}`}
                                     fill={COLORS[idx % COLORS.length]}
@@ -579,42 +703,48 @@ export default function StatisticsPage() {
                           Нужны хотя бы 3 вопроса на тег
                         </span>
                       </div>
-                      <div className="space-y-3 text-xs text-slate-300">
-                        {weakTags.length === 0 && (
-                          <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2">
-                            Пока недостаточно данных по тегам. Решай задания — и здесь появится анализ.
-                          </div>
-                        )}
 
-                        {weakTags.length > 0 && (
-                          <ul className="space-y-2">
-                            {weakTags.map((t) => (
-                              <li
-                                key={t.tag}
-                                className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2"
-                              >
-                                <div className="flex flex-col">
-                                  <span className="font-medium text-slate-100">
-                                    {t.tag}
-                                  </span>
-                                  <span className="text-[11px] text-slate-400">
-                                    Вопросов: {t.total}, верных: {t.correct}
+                      {weakTags.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-700/80 bg-slate-900/80 px-3 py-3 text-xs text-slate-400">
+                          Пока недостаточно данных по тегам. Решай задания — и здесь появится анализ, какие типы
+                          вопросов даются легче, а какие сложнее.
+                        </div>
+                      )}
+
+                      {weakTags.length > 0 && (
+                        <div className="flex flex-col gap-3">
+                          <div>
+                            <div className="mb-1 text-xs font-semibold text-red-300">
+                              Слабые теги
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {weakTags.map((t) => (
+                                <div
+                                  key={t.tag}
+                                  className="flex items-center justify-between rounded-lg bg-red-500/5 px-3 py-1.5"
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-medium text-red-100">
+                                      {t.tag}
+                                    </span>
+                                    <span className="text-[11px] text-red-200/80">
+                                      Вопросов: {t.total}, верных: {t.correct}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-semibold text-red-300">
+                                    {pct(t.accuracy)}%
                                   </span>
                                 </div>
-                                <span className="text-sm font-semibold text-slate-200">
-                                  {pct(t.accuracy)}%
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                              ))}
+                            </div>
+                          </div>
 
-                        {stats.tagStats.length > 0 && (
-                          <p className="mt-2 text-[11px] text-slate-500">
-                            Полная статистика по тегам использует накопленные данные из всех тестов.
+                          <p className="text-[11px] text-slate-500">
+                            Полная статистика по тегам строится по накопленным данным из всех тестов. Чем больше ты
+                            решаешь — тем точнее становится анализ.
                           </p>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.section>
@@ -633,7 +763,7 @@ export default function StatisticsPage() {
               {recsLoading && (
                 <div className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-300">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Генерируем рекомендации на основе твоих тестов…</span>
+                  <span>Загружаем рекомендации...</span>
                 </div>
               )}
 
@@ -641,7 +771,7 @@ export default function StatisticsPage() {
                 <div className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
                   <AlertTriangle className="mt-0.5 h-4 w-4" />
                   <div>
-                    <div className="font-medium">Ошибка</div>
+                    <div className="font-medium">Ошибка рекомендаций</div>
                     <p className="text-xs text-red-100/80">{recsError}</p>
                   </div>
                 </div>
@@ -658,8 +788,14 @@ export default function StatisticsPage() {
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2">
-                    {recs.recommendations.map((r, idx) => (
-                      <RecCard key={idx} item={r} />
+                    {negativeRecs.map((r, idx) => (
+                      <RecCard key={`neg-${idx}`} item={r} />
+                    ))}
+                    {neutralRecs.map((r, idx) => (
+                      <RecCard key={`neu-${idx}`} item={r} />
+                    ))}
+                    {positiveRecs.map((r, idx) => (
+                      <RecCard key={`pos-${idx}`} item={r} />
                     ))}
                   </div>
 
@@ -694,16 +830,14 @@ type SummaryCardProps = {
 function SummaryCard({ icon: Icon, label, value, helper }: SummaryCardProps) {
   return (
     <motion.div
-      variants={fadeVariants(0.08)}
+      variants={fadeVariants(0.05)}
       initial="hidden"
       animate="show"
-      className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm"
+      className="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3"
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">
-            {label}
-          </div>
+          <div className="text-xs font-medium text-slate-400">{label}</div>
           <div className="mt-1 text-xl font-semibold text-slate-50">
             {value}
           </div>
@@ -717,6 +851,11 @@ function SummaryCard({ icon: Icon, label, value, helper }: SummaryCardProps) {
       </div>
     </motion.div>
   );
+}
+
+function pct(v: number | null | undefined): number {
+  if (!v || !isFinite(v)) return 0;
+  return Math.round(v * 100);
 }
 
 function RecCard({ item }: { item: RecItem }) {
@@ -736,15 +875,17 @@ function RecCard({ item }: { item: RecItem }) {
     iconColor = "text-red-400";
     label = "Зона роста";
   } else {
-    border = "border-slate-700";
+    border = "border-slate-700/80";
     bg = "bg-slate-900/80";
     iconColor = "text-slate-300";
-    label = "Нейтрально";
+    label = "Нейтральное замечание";
   }
 
   return (
-    <div className={`flex h-full flex-col rounded-2xl border px-4 py-3 text-sm ${border} ${bg}`}>
-      <div className="mb-1 flex items-center gap-2">
+    <div
+      className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 text-sm shadow-sm ${border} ${bg}`}
+    >
+      <div className="flex items-center gap-2">
         {item.type === "positive" ? (
           <CheckCircle2 className={`h-4 w-4 ${iconColor}`} />
         ) : item.type === "negative" ? (

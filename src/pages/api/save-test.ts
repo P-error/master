@@ -2,7 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { Difficulty } from "@prisma/client";
+import { Difficulty, Mode } from "@prisma/client";
 
 type ResultIn = {
   total: number;
