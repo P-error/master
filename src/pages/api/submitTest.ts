@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import type { TestQuestion } from "./generate-test";
+
+type TestQuestion = any;
 
 type SubmitBody = {
   subjectId: number;
