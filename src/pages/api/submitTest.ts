@@ -47,7 +47,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (ok) correct++;
     byQuestion.push({ id: q.id, correct: ok, expected: q.answerIndex, got: user });
 
-    (q.tags || []).forEach((t) => {
+    (q.tags || []).forEach((t: any) => {
       const tag = String(t);
       if (!byTag[tag]) byTag[tag] = { total: 0, correct: 0 };
       byTag[tag].total += 1;
