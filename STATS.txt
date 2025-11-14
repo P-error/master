@@ -1,0 +1,49 @@
+# File type stats (по расширениям)
+
+     28 ts
+     27 tsx
+     26 sql
+      4 json
+      3 mjs
+      2 toml
+      2 css
+      2 cjs
+      1 sh
+      1 prisma
+      1 local
+      1 js
+      1 env
+      1 db
+      1 backup_2025-10-10_12-11
+
+# Top 30 largest files (KiB)
+364	package-lock.json
+80	prisma/dev.db
+32	src/pages/statistics.tsx
+16	src/pages/test/[sessionId].tsx
+16	src/pages/settings.tsx
+16	src/pages/api/test/submit.ts
+12	src/pages/subjects/index.tsx
+12	src/pages/register.tsx
+12	src/pages/profile.tsx
+12	src/pages/chat.tsx
+12	src/pages/api/generate-test.ts
+12	src/generate-test.fixed.ts
+12	src/components/TestForm.tsx
+12	src/components/SubjectAutocomplete.tsx
+12	src/components/NavBar.tsx
+12	prisma/schema.prisma
+12	prisma/migrations/20251113222402_add_target_score_and_passed/migration.sql
+8	src/pages/test/index.tsx
+8	src/pages/login.tsx
+8	src/pages/index.tsx
+8	src/pages/api/subjects.ts
+8	src/pages/api/statistics.ts
+8	src/pages/api/settings.ts
+8	src/pages/api/recommendations.ts
+8	src/pages/api/chat.ts
+8	scripts/pack.mjs
+4	.vercel/project.json
+4	tsconfig.json
+4	tailwind.config.cjs
+4	src/styles/index.css

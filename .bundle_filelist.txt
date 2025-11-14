@@ -14,6 +14,9 @@
 ./prisma/migrations/20251010093526_add_test_and_qtr_links/migration.sql
 ./prisma/migrations/20251010124324_/migration.sql
 ./prisma/migrations/20251013003006_add_user_email/migration.sql
+./prisma/migrations/20251113222402_add_target_score_and_passed/migration.sql
+./prisma/migrations/20251113224218_add_target_score_and_passed_2/migration.sql
+./prisma/migrations/20251114002126_add_user_tag_stats/migration.sql
 ./prisma/migrations/migration_lock.toml
 ./prisma/migrations_sqlite_backup_2025-10-10_11-53/20250921144718_init/migration.sql
 ./prisma/migrations_sqlite_backup_2025-10-10_11-53/20250921145741_init_auth/migration.sql
@@ -69,6 +72,7 @@
 ./src/pages/api/save-test.ts
 ./src/pages/api/settings.ts
 ./src/pages/api/statistics.ts
+./src/pages/api/stats/tags.ts
 ./src/pages/api/subjects.ts
 ./src/pages/api/submitTest.ts
 ./src/pages/api/test/generate.ts
