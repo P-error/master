@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         accuracy: result.total > 0 ? result.correct / result.total : 0,
         byTag: result.byTag ?? {},
         byQuestion: result.byQuestion ?? [],
-      },
+      } as any,
       select: { id: true, createdAt: true },
     });
 
