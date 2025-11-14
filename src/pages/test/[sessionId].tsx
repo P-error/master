@@ -26,7 +26,9 @@ type SubmitResult = {
   attemptId: number;
   total: number;
   correct: number;
-  accuracy: number; // 0..1
+  accuracy: number; // 0..1 (доля)
+  targetScore?: number | null;
+  passed?: boolean | null;
   byQuestion?: Array<{
     id: string;
     chosenIndex: number;
@@ -34,6 +36,7 @@ type SubmitResult = {
     isCorrect: boolean;
     tags: string[];
   }>;
+  byTag?: Record<string, { total: number; correct: number; accuracy: number }>;
 };
 
 function normalizeQuestion(q: any, i: number): Question {
@@ -284,29 +287,63 @@ export default function TestSessionPage() {
                     Верно: <b>{result.correct}</b> из <b>{result.total}</b>
                     {percent !== null ? <> ({percent}%)</> : null}
                   </p>
+
+                  {typeof result.targetScore === "number" && (
+                    <p className="mt-1 text-sm">
+                      {result.passed === true && (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <BadgeCheck className="h-4 w-4" />
+                          <span>
+                            Тест пройден. Порог: {result.targetScore}%.
+                          </span>
+                        </span>
+                      )}
+                      {result.passed === false && (
+                        <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                          <XCircle className="h-4 w-4" />
+                          <span>
+                            Тест не пройден. Порог: {result.targetScore}%.
+                          </span>
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 {Array.isArray(result.byQuestion) && result.byQuestion.length > 0 && (
                   <ul className="space-y-2">
-                    {result.byQuestion.map((r, idx) => (
-                      <li
-                        key={r.id || idx}
-                        className="flex items-center gap-3 rounded-xl border border-gray-200/60 px-3 py-2 dark:border-white/10"
-                      >
-                        {r.isCorrect ? (
-                          <BadgeCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                        )}
-                        <div className="text-sm">
-                          <div className="font-medium">Вопрос {idx + 1}</div>
-                          <div className="text-gray-600 dark:text-gray-400">
-                            Выбрано: {r.chosenIndex >= 0 ? r.chosenIndex + 1 : "—"}, правильный:{" "}
-                            {r.correctIndex >= 0 ? r.correctIndex + 1 : "—"}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
+                    {result.byQuestion.map((r, idx) => {
+                          // берём ответ из локального стейта answers, если он есть;
+                          // иначе падаем обратно на chosenIndex, пришедший с бэка
+                          const userAns = answers[idx];
+                          const chosenIdx =
+                            userAns && typeof (userAns as any).answer === "number"
+                              ? (userAns as any).answer
+                              : r.chosenIndex;
+
+                          return (
+                            <li
+                              key={r.id ?? idx}
+                              className="flex items-center justify-between rounded-lg bg-black/5 px-3 py-2 dark:bg-white/5"
+                            >
+                              <div className="flex items-center gap-2">
+                                {r.isCorrect ? (
+                                  <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400" />
+                                ) : (
+                                  <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                )}
+                                <div className="text-sm">
+                                  <div className="font-medium">Вопрос {idx + 1}</div>
+                                  <div className="text-gray-600 dark:text-gray-400">
+                                    Выбрано: {chosenIdx >= 0 ? chosenIdx + 1 : "—"}, правильный:{" "}
+                                    {r.correctIndex >= 0 ? r.correctIndex + 1 : "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+
                   </ul>
                 )}
               </div>

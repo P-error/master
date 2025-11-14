@@ -60,8 +60,9 @@ model User {
   testAttempts   TestAttempt[]
 
   // Метаданные
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  UserTagStat UserTagStat[]
 }
 
 // ---- Сообщения чата (как было) ----
@@ -98,6 +99,7 @@ model Subject {
   testAttempts        TestAttempt[]
   // нормализованные вопросы по тестам этого предмета
   normalizedQuestions TestQuestion[]
+  UserTagStat         UserTagStat[]
 
   @@unique([userId, name, difficulty], name: "subject_user_name_difficulty")
   @@index([userId, updatedAt])
@@ -189,6 +191,8 @@ model TestAttempt {
   difficulty  Difficulty
   mode        Mode
   tagsVersion String
+  targetScore Int?
+  passed      Boolean?
 
   // Результаты
   total      Int
@@ -246,4 +250,28 @@ model TagLegendVersion {
   content   String   @db.Text // полный текст легенды (как сейчас передаётся в LLM)
   checksum  String?
   createdAt DateTime @default(now())
+}
+
+// ---- Агрегированная статистика по тегам ----
+// Накапливает статистику по каждому тегу для пользователя и (опционально) предмета.
+model UserTagStat {
+  id Int @id @default(autoincrement())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId Int?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  tag      String
+  total    Int    @default(0)
+  correct  Int    @default(0)
+  accuracy Float  @default(0) // 0..1
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, subjectId, tag])
+  @@index([userId, subjectId])
+  @@index([userId, tag])
 }

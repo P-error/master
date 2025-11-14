@@ -30,7 +30,9 @@ type SubmitBody =
     };
 
 function bad(res: NextApiResponse, code: number, msg: string) {
-  try { res.setHeader("X-Error-Message", msg); } catch {}
+  try {
+    res.setHeader("X-Error-Message", msg);
+  } catch {}
   // eslint-disable-next-line no-console
   console.error("[submit]", code, msg);
   return res.status(code).json({ error: msg });
@@ -83,9 +85,11 @@ async function loadQuestionsFromJson(generatedTestId: number) {
       difficulty: true,
       mode: true,
       tagsVersion: true,
+      targetScore: true,
       questions: true, // JSON массив вопросов
     },
   });
+
   if (!test) return { error: "Test not found" as const };
 
   const raw = test.questions as
@@ -195,7 +199,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Подсчёт
     let correct = 0;
-    const answersDetailed: { qIndex: number; chosenIndex: number; correct: boolean; tags: string[] }[] = [];
+
+    // Формат, который ждёт фронт в SubmitResult.byQuestion
+    const answersDetailed: {
+      id: string;
+      qIndex: number;
+      chosenIndex: number;
+      correctIndex: number;
+      isCorrect: boolean;
+      tags: string[];
+    }[] = [];
+
     const byTag: Record<string, { total: number; correct: number; accuracy: number }> = {};
 
     for (const a of answers) {
@@ -219,7 +233,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (ok) correct += 1;
 
       const tags = Array.isArray(q.tags) ? q.tags : [];
-      answersDetailed.push({ qIndex: a.qIndex, chosenIndex: a.chosenIndex, correct: ok, tags });
+
+      answersDetailed.push({
+        id: String(a.qIndex + 1), // простой стабильный id
+        qIndex: a.qIndex,
+        chosenIndex: a.chosenIndex,
+        correctIndex: q.answerIndex, // фронт показывает это как "правильный"
+        isCorrect: ok, // для зелёной/красной иконки
+        tags,
+      });
 
       for (const t of tags) {
         if (!byTag[t]) byTag[t] = { total: 0, correct: 0, accuracy: 0 };
@@ -228,10 +250,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const accuracy = total > 0 ? round1((correct / total) * 100) : 0;
+    // accuracy как доля 0..1, scorePercent как 0..100
+    const accuracy = total > 0 ? round1(correct / total) : 0;
+    const scorePercent = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+    // accuracy по тегам тоже доля 0..1
     for (const t of Object.keys(byTag)) {
       const v = byTag[t];
-      v.accuracy = v.total ? round1((v.correct / v.total) * 100) : 0;
+      v.accuracy = v.total ? round1(v.correct / v.total) : 0;
     }
 
     // Тайминги (опционально)
@@ -239,6 +265,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const completedAt = (body as any).completedAt ? new Date((body as any).completedAt) : undefined;
     const durationMsRaw = (body as any).durationMs;
     const durationMs = durationMsRaw == null ? undefined : toNum(durationMsRaw) ?? undefined;
+
+    // Порог и passed
+    const targetScore: number | null =
+      typeof (test as any).targetScore === "number" ? (test as any).targetScore : null;
+
+    const passed: boolean | null = targetScore != null ? scorePercent >= targetScore : null;
 
     // Сохраняем попытку
     const attempt = await prisma.testAttempt.create({
@@ -254,17 +286,89 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         total,
         correct,
-        accuracy,
+        accuracy, // доля 0..1
         byTag: byTag as any,
         byQuestion: answersDetailed as any,
         rawAnswers: answers as any,
+
+        // Новый функционал порога
+        ...(targetScore != null ? { targetScore } : {}),
+        ...(passed !== null ? { passed } : {}),
 
         ...(durationMs != null ? { durationMs } : {}),
         ...(startedAt ? { startedAt } : {}),
         ...(completedAt ? { completedAt } : {}),
       },
-      select: { id: true, accuracy: true, correct: true, total: true, byTag: true },
+      select: {
+        id: true,
+        accuracy: true,
+        correct: true,
+        total: true,
+        byTag: true,
+        targetScore: true,
+        passed: true,
+        byQuestion: true,
+      },
     });
+
+    // Агрегированная статистика по тегам (User + Subject + Tag)
+    {
+      const subjIdForStat = subjectId ?? null;
+
+      for (const [tag, stat] of Object.entries(byTag)) {
+        const totalDelta = stat.total;
+        const correctDelta = stat.correct;
+
+        // Пропускаем теги без вопросов
+        if (!totalDelta) continue;
+
+        const existing = await prisma.userTagStat.findUnique({
+          where: {
+            userId_subjectId_tag: {
+              userId: uid,
+              subjectId: subjIdForStat,
+              tag,
+            },
+          },
+        });
+
+        if (!existing) {
+          const baseTotal = totalDelta;
+          const baseCorrect = correctDelta;
+          const baseAccuracy = baseTotal > 0 ? round1(baseCorrect / baseTotal) : 0;
+
+          await prisma.userTagStat.create({
+            data: {
+              userId: uid,
+              subjectId: subjIdForStat,
+              tag,
+              total: baseTotal,
+              correct: baseCorrect,
+              accuracy: baseAccuracy,
+            },
+          });
+        } else {
+          const newTotal = existing.total + totalDelta;
+          const newCorrect = existing.correct + correctDelta;
+          const newAccuracy = newTotal > 0 ? round1(newCorrect / newTotal) : 0;
+
+          await prisma.userTagStat.update({
+            where: {
+              userId_subjectId_tag: {
+                userId: uid,
+                subjectId: subjIdForStat,
+                tag,
+              },
+            },
+            data: {
+              total: newTotal,
+              correct: newCorrect,
+              accuracy: newAccuracy,
+            },
+          });
+        }
+      }
+    }
 
     return res.status(200).json({
       ok: true,
@@ -273,6 +377,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       correct: attempt.correct,
       total: attempt.total,
       byTag: attempt.byTag,
+      byQuestion: attempt.byQuestion,
+      targetScore: attempt.targetScore,
+      passed: attempt.passed,
     });
   } catch (err: any) {
     const msg = err?.message || "Internal Server Error";

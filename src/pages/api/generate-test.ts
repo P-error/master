@@ -9,6 +9,13 @@ type DiffPrisma = "EASY" | "MEDIUM" | "HARD";
 type ModeLower = "academic" | "comfort" | "random";
 type ModePrisma = "ACADEMIC" | "COMFORT" | "RANDOM";
 
+const TAG_LEGEND_V1: Record<string, string> = {
+  ac: "Academic, formal/rigorous style; close to exam wording",
+  fr: "Friendly, conversational style; simpler wording",
+  rw: "Real-world examples and applications",
+  ch: "Challenging or tricky question that requires deeper reasoning",
+};
+
 type Body = {
   subject?: string;
   subjectId?: number;
@@ -128,32 +135,54 @@ async function generateViaOpenAI(
 ): Promise<StoredQuestion[]> {
   const { topic, difficulty, count, mode, refinements } = params;
 
-  const sys = `You are a test generator. Output ONLY a valid JSON array with questions. No prose, no markdown fences.`;
-  const user = {
-    instruction: "Generate multiple-choice questions.",
-    topic,
-    difficulty,
-    mode,
-    count,
-    refinements,
-    schema: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: ["string", "number"] },
-          question: { type: "string" },
-          options: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 8 },
-          answerIndex: { type: "number" },
-          tags: { type: "array", items: { type: "string" } },
+  const sys = `You are a test generator for an educational platform.
+
+You MUST:
+- Output ONLY a valid JSON array of question objects, no extra text.
+- Follow the JSON schema provided in the user message.
+- For each question, include a "tags" field: an array of short tag codes.
+- Use ONLY tag codes that exist as keys in the "tagLegend" object from the user message.
+- Do NOT invent new tag codes.
+
+No prose, no markdown fences, no explanations — only the JSON array of questions.`;
+
+const user = {
+  instruction:
+    "Generate multiple-choice questions for students. Use the tagLegend to assign tags to each question.",
+  topic,
+  difficulty,
+  mode,
+  count,
+  refinements,
+  // Жёсткий словарь допустимых тегов, которые можно использовать в поле 'tags'
+  tagLegend: TAG_LEGEND_V1,
+  // Схема ожидаемых объектов вопроса
+  schema: {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        id: { type: ["string", "number"] },
+        question: { type: "string" },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: 8,
         },
-        required: ["question", "options", "answerIndex"],
-        additionalProperties: true,
+        answerIndex: { type: "number" },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+        },
       },
-      minItems: 1,
-      maxItems: 50,
+      required: ["question", "options", "answerIndex"],
+      additionalProperties: true,
     },
-  };
+    minItems: 1,
+    maxItems: 50,
+  },
+};
 
   log("OPENAI model:", process.env.OPENAI_MODEL || "gpt-4o-mini");
   log("Prompt topic:", topic, "difficulty:", difficulty, "count:", count, "mode:", mode);
@@ -223,6 +252,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const topicStr = (topic ?? subject ?? "").trim();
     const refinementsArr = Array.isArray(refinements) ? refinements : [];
     const tagsVer = (tagsVersion ?? "v1").trim() || "v1";
+    const g = Number(goal);
+    const targetScore = Number.isFinite(g)
+      ? Math.min(Math.max(Math.round(g), 0), 100)
+      : null;
+
 
     log("ENV OPENAI_API_KEY?", !!openaiKey, "numQuestions:", numQuestions);
 
@@ -262,6 +296,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         tagsVersion: tagsVer,
         refinements: refinementsArr,
         numQuestions,
+        targetScore,
         numOptions: questions[0]?.options?.length ?? 4,
         prefSnapshot: null,
         plannedTagsPerQuestion,
