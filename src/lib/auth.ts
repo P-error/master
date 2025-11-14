@@ -1,6 +1,6 @@
 // src/lib/auth.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import jwt from "jsonwebtoken";
+import * as jwt from "jsonwebtoken";
 
 export type AuthPayload = { userId: number; login: string; email: string | null };
 
@@ -29,7 +29,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
 
 /** Подписать JWT токен; по умолчанию 30 дней */
 export function signToken(payload: AuthPayload, expiresIn: string = "30d"): string {
-  return jwt.sign(payload, getJwtSecret(), { expiresIn });
+  return jwt.sign(payload as any, getJwtSecret(), { expiresIn } as any);
 }
 
 function verifyToken(token: string | null): AuthPayload | null {
